@@ -1,1 +1,7 @@
 pandas
+requests
+python-dotenv
+jupyter
+matplotlib
+seaborn
+plotly
