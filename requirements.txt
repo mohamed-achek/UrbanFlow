@@ -1,8 +1,25 @@
+# Basic requirements
 pandas
-requests
-python-dotenv
-jupyter
+numpy
 matplotlib
 seaborn
-plotly
-folium
+streamlit
+
+# ML requirements
+scikit-learn
+xgboost
+lightgbm
+
+# LangChain requirements
+langchain
+openai
+faiss-cpu
+tiktoken
+huggingface_hub
+transformers
+sentence_transformers
+
+# For document loading
+unstructured
+pdf2image
+pytesseract
