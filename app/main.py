@@ -1,11 +1,86 @@
 import streamlit as st
 from chatbot import get_chatbot_response
+import os
+from PIL import Image
 
 st.set_page_config(
     page_title="UrbanFlow AI: Smart Bike Demand Forecasting in NYC",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Header section with logo - update styles to make image smaller
+st.markdown(
+    """
+    <style>
+    .header-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+    .logo-img {
+        max-width: 50%; /* Reduced from 70% to 50% */
+        height: auto;
+    }
+    .title-text {
+        color: #1E88E5;
+        font-size: 2.5rem !important;
+        font-weight: 700 !important;
+        margin-bottom: 0 !important;
+    }
+    .subtitle-text {
+        font-size: 1.2rem !important;
+        color: #666;
+        margin-top: 0 !important;
+    }
+    /* Added styles to center the image */
+    .stImage {
+        text-align: center;
+        margin: 0 auto;
+        display: block;
+    }
+    </style>
+    """, 
+    unsafe_allow_html=True
+)
+
+# Display header image - fix the image path issue
+# Try multiple possible paths for the image
+possible_paths = [
+    "../assets/header.png", 
+    "../assets/Header.png",
+    "../Assets/header.png",
+    "../Assets/Header.png",
+    "assets/header.png",
+    "assets/Header.png",
+    "./assets/header.png",
+]
+
+# Check if any of the possible paths exist
+header_image_path = None
+for path in possible_paths:
+    if os.path.exists(path):
+        header_image_path = path
+        break
+
+# If image not found, try to create the assets directory and display a message
+if header_image_path is None:
+    # Create assets directory if it doesn't exist
+    assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
+    os.makedirs(assets_dir, exist_ok=True)
+    
+    # Display a notice about the missing image
+    st.warning(f"Header image not found. Please add a header image to the 'assets' directory.")
+    
+    # Create a title as fallback
+    st.markdown('<h1 class="title-text">UrbanFlow AI</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle-text">Smart Bike Demand Forecasting in NYC</p>', unsafe_allow_html=True)
+else:
+    # Image found, display it with smaller width
+    col1, col2, col3 = st.columns([1, 2, 1])  # Create 3 columns for layout
+    with col2:  # Use the middle column to display the image
+        st.image(header_image_path, width=500)  # Set a fixed width of 500 pixels
 
 # Sidebar controls
 st.sidebar.title("UrbanFlow AI Controls")

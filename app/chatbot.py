@@ -7,8 +7,9 @@ from typing import List, Optional
 # Updated LangChain imports
 from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_openai import ChatOpenAI
-from langchain_huggingface.llms import HuggingFaceHub  # Fixed import path
+#from langchain_openai import ChatOpenAI
+# Fix HuggingFace import - use the current structure
+from langchain_community.llms import HuggingFaceEndpoint
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
 from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader, PyPDFLoader
@@ -44,10 +45,11 @@ class UrbanFlowLangChainBot:
         try:
             # Prioritize Hugging Face models unless explicitly asked to use OpenAI
             if not self.use_openai and "HUGGINGFACEHUB_API_TOKEN" in os.environ:
-                # Use Hugging Face models
-                self.llm = HuggingFaceHub(
-                    repo_id="google/flan-t5-large",  # Using a larger model for better responses
-                    model_kwargs={"temperature": 0.5, "max_length": 512}
+                # Use Hugging Face models with updated initialization
+                self.llm = HuggingFaceEndpoint(
+                    repo_id="google/flan-t5-large",
+                    model_kwargs={"temperature": 0.5, "max_length": 512},
+                    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
                 )
                 self.embeddings = HuggingFaceEmbeddings(
                     model_name="sentence-transformers/all-mpnet-base-v2"  # Better embedding model
@@ -60,10 +62,11 @@ class UrbanFlowLangChainBot:
                 print("Using OpenAI models")
             # Final fallback if neither condition is met
             elif "HUGGINGFACEHUB_API_TOKEN" in os.environ:
-                # Default to Hugging Face if token exists
-                self.llm = HuggingFaceHub(
+                # Default to Hugging Face if token exists - with updated initialization
+                self.llm = HuggingFaceEndpoint(
                     repo_id="google/flan-t5-base",
-                    model_kwargs={"temperature": 0.1, "max_length": 512}
+                    model_kwargs={"temperature": 0.1, "max_length": 512},
+                    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
                 )
                 self.embeddings = HuggingFaceEmbeddings()
                 print("Using HuggingFace models (fallback)")
