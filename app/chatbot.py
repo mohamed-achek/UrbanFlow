@@ -4,14 +4,14 @@ import random
 from datetime import datetime
 from typing import List, Optional
 
-# LangChain imports
-from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
-from langchain.llms import HuggingFaceHub
+# Updated LangChain imports
+from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_openai import ChatOpenAI
+from langchain_huggingface.llms import HuggingFaceHub  # Fixed import path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
-from langchain.document_loaders import TextLoader, CSVLoader, DirectoryLoader, PyPDFLoader
+from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader, PyPDFLoader
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
 

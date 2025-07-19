@@ -10,9 +10,11 @@ scikit-learn
 xgboost
 lightgbm
 
-# LangChain requirements
+# LangChain requirements - updated
 langchain
-openai
+langchain-community
+langchain-openai
+langchain-huggingface
 faiss-cpu
 tiktoken
 huggingface_hub

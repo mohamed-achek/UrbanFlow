@@ -1,3 +1,67 @@
+# Data directories
 /data
 /urbanflow
+
+# Environment variables and secrets
 .env
+.env.*
+*.env
+api_keys.txt
+
+# Python environments
+venv/
+env/
+ENV/
+.venv/
+.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+profile_default/
+ipython_config.py
+
+# Model files
+*.pkl
+*.h5
+*.model
+*.joblib
+*.save
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Temporary files
+tmp/
+temp/
+.~*
+
+# Streamlit specific
+.streamlit/secrets.toml
+
+# Local development environment
+local_settings.py
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
