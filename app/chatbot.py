@@ -4,12 +4,35 @@ import random
 from datetime import datetime
 from typing import List, Optional
 
-# Updated LangChain imports
-from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+# Add dotenv to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Try to load from different possible locations
+    load_dotenv()  # Load from .env in current directory
+    load_dotenv("../.env")  # Try one directory up
+    print("Loaded environment variables from .env file")
+except ImportError:
+    print("python-dotenv not installed. Cannot load .env file.")
+    print("Install with: pip install python-dotenv")
+except Exception as e:
+    print(f"Error loading .env file: {e}")
+
+# Import LangChain components with proper error handling
+try:
+    # First try importing from the newer langchain_huggingface package
+    from langchain_huggingface import HuggingFaceEmbeddings
+    print("Using HuggingFaceEmbeddings from langchain_huggingface")
+    
+    # For the LLM, we'll try a different approach to avoid provider errors
+    from langchain_community.llms import HuggingFaceHub  # Use HuggingFaceHub instead of HuggingFaceEndpoint
+    print("Using HuggingFaceHub from langchain_community")
+except ImportError:
+    # Fall back to community imports if needed
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_community.llms import HuggingFaceHub
+    print("Using HuggingFace components from langchain_community")
+
 from langchain_community.vectorstores import FAISS
-#from langchain_openai import ChatOpenAI
-# Fix HuggingFace import - use the current structure
-from langchain_community.llms import HuggingFaceEndpoint
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
 from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader, PyPDFLoader
@@ -17,7 +40,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
 
 class UrbanFlowLangChainBot:
-    def __init__(self, use_openai=False):  # Changed default to False to prefer Hugging Face
+    def __init__(self):  # Removed use_openai parameter
         self.name = "UrbanFlow Assistant"
         self.greeting_phrases = [
             "Hello! I'm your UrbanFlow Assistant. How can I help you?",
@@ -28,58 +51,76 @@ class UrbanFlowLangChainBot:
         # Project data paths
         self.data_path = "../data/final/"
         self.docs_path = "../docs/"
-        self.use_openai = use_openai
         
         # Initialize chat components
         self.llm = None
         self.embeddings = None
         self.vector_store = None
         self.conversation_chain = None
-        self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        
+        # Add status tracking for API key and fallback
+        self.is_using_fallback = False
+        self.api_key_message = ""
+        
+        # Update memory implementation to fix the deprecation warning
+        from langchain.schema import messages_from_dict, messages_to_dict
+        self.memory = ConversationBufferMemory(
+            return_messages=True,
+            memory_key="chat_history"
+        )
         
         # Setup LangChain components
         self._setup_langchain()
         
     def _setup_langchain(self):
         """Set up LangChain components based on available models"""
+        # Check for API key first
+        if not self._check_api_key():
+            # If no API key, we'll use fallback responses
+            self.is_using_fallback = True
+            return
+            
         try:
-            # Prioritize Hugging Face models unless explicitly asked to use OpenAI
-            if not self.use_openai and "HUGGINGFACEHUB_API_TOKEN" in os.environ:
-                # Use Hugging Face models with updated initialization
-                self.llm = HuggingFaceEndpoint(
-                    repo_id="google/flan-t5-large",
-                    model_kwargs={"temperature": 0.5, "max_length": 512},
-                    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
-                )
-                self.embeddings = HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-mpnet-base-v2"  # Better embedding model
-                )
-                print("Using HuggingFace models")
-            # Fall back to OpenAI if requested and available
-            elif self.use_openai and "OPENAI_API_KEY" in os.environ:
-                self.llm = ChatOpenAI(temperature=0.2, model_name="gpt-3.5-turbo")
-                self.embeddings = OpenAIEmbeddings()
-                print("Using OpenAI models")
-            # Final fallback if neither condition is met
-            elif "HUGGINGFACEHUB_API_TOKEN" in os.environ:
-                # Default to Hugging Face if token exists - with updated initialization
-                self.llm = HuggingFaceEndpoint(
-                    repo_id="google/flan-t5-base",
-                    model_kwargs={"temperature": 0.1, "max_length": 512},
-                    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
-                )
-                self.embeddings = HuggingFaceEmbeddings()
-                print("Using HuggingFace models (fallback)")
-            else:
-                print("No API keys found. Unable to initialize language models.")
-                return
+            # Switch to HuggingFaceHub which is more stable than HuggingFaceEndpoint
+            self.llm = HuggingFaceHub(
+                repo_id="google/flan-t5-base",  # Using a smaller model that's more likely to work
+                huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"],
+                model_kwargs={
+                    "temperature": 0.5,
+                    "max_length": 512
+                }
+            )
+            
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"  # Using a smaller, faster embedding model
+            )
+            print("Using HuggingFace models")
             
             # Create the vector store and load documents
             self._load_documents()
             
         except Exception as e:
             print(f"Error setting up LangChain components: {e}")
-            # If we fail, we'll fall back to the default responses
+            self.is_using_fallback = True
+            self.api_key_message = f"Error initializing models: {str(e)}"
+    
+    def _check_api_key(self):
+        """Check if the HuggingFace API key is available"""
+        if "HUGGINGFACEHUB_API_TOKEN" not in os.environ:
+            self.api_key_message = (
+                "No HuggingFace API key found. Please set the HUGGINGFACEHUB_API_TOKEN "
+                "environment variable. Using basic responses without AI capabilities."
+            )
+            print(self.api_key_message)
+            return False
+        elif not os.environ["HUGGINGFACEHUB_API_TOKEN"].strip():
+            self.api_key_message = (
+                "HuggingFace API key is empty. Please set a valid API key in the "
+                "HUGGINGFACEHUB_API_TOKEN environment variable."
+            )
+            print(self.api_key_message)
+            return False
+        return True
     
     def _load_documents(self):
         """Load project documents and create vector store"""
@@ -161,7 +202,9 @@ class UrbanFlowLangChainBot:
             self.conversation_chain = ConversationalRetrievalChain.from_llm(
                 llm=self.llm,
                 retriever=retriever,
-                memory=self.memory
+                memory=self.memory,
+                return_source_documents=False,
+                verbose=False
             )
             
             print(f"Created vector store with {len(texts)} text chunks")
@@ -179,11 +222,16 @@ class UrbanFlowLangChainBot:
             
         if self.conversation_chain:
             try:
-                # Use LangChain for response
-                response = self.conversation_chain({"question": user_input})
+                # Use LangChain for response - update to use invoke() method
+                response = self.conversation_chain.invoke({"question": user_input})
                 return response['answer']
             except Exception as e:
+                # Improved error handling with more details
+                import traceback
+                error_details = traceback.format_exc()
                 print(f"Error getting LangChain response: {e}")
+                print(f"Error details: {error_details}")
+                
                 # Fall back to default response
                 return self._get_default_response(user_input)
         else:
@@ -234,22 +282,15 @@ class UrbanFlowLangChainBot:
         return "I'm not sure about that. You can ask me about bike usage, weather impact, traffic patterns, or popular stations."
 
 
-# Initialize with environment variables - prioritize Hugging Face
+# Initialize with environment variables - using only HuggingFace
 has_hf_key = "HUGGINGFACEHUB_API_TOKEN" in os.environ
-has_openai_key = "OPENAI_API_KEY" in os.environ
 
-if has_hf_key:
-    chatbot = UrbanFlowLangChainBot(use_openai=False)  # Explicitly use Hugging Face
-elif has_openai_key:
-    print("Warning: HuggingFace API token not found, falling back to OpenAI.")
-    chatbot = UrbanFlowLangChainBot(use_openai=True)
-else:
-    # If no API keys are available, a message will be printed
-    print("Warning: No API keys found for HuggingFace or OpenAI.")
-    print("Please set HUGGINGFACEHUB_API_TOKEN environment variable.")
-    print("Falling back to default responses without LangChain.")
-    chatbot = UrbanFlowLangChainBot()
+chatbot = UrbanFlowLangChainBot()
 
 def get_chatbot_response(user_input):
     """Get a response from the chatbot for the given user input"""
     return chatbot.get_response(user_input)
+
+def get_api_status():
+    """Get the API connection status for display in the UI"""
+    return chatbot.get_api_status()

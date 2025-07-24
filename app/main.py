@@ -130,6 +130,17 @@ with tabs[4]:
 # New tab for the chatbot
 with tabs[5]:
     st.header("UrbanFlow Assistant")
+    
+    # Show API status
+    from chatbot import get_api_status
+    status_message = get_api_status()
+    if "fallback" in status_message.lower():
+        st.warning(status_message)
+    elif "connected" in status_message.lower():
+        st.success(status_message)
+    else:
+        st.info(status_message)
+    
     st.markdown("Ask me questions about bike usage, weather impact, traffic patterns, or popular stations!")
     
     # Initialize chat history in session state if it doesn't exist
@@ -158,7 +169,7 @@ with tabs[5]:
         st.session_state.chat_history.append({"role": "assistant", "content": response})
         
         # Clear input box after processing
-        st.experimental_rerun()
+        st.rerun()
     
     # Add some example questions to help users get started
     st.markdown("### Example questions:")
@@ -181,4 +192,4 @@ with tabs[5]:
             st.session_state.chat_history.append({"role": "assistant", "content": response})
             
             # Rerun to update the UI
-            st.experimental_rerun()
+            st.rerun()

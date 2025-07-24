@@ -1,9 +1,9 @@
 # Basic requirements
-pandas
+pandas>=2.0.0
 numpy
 matplotlib
 seaborn
-streamlit
+streamlit>=1.27.0
 
 # ML requirements
 scikit-learn
@@ -11,17 +11,20 @@ xgboost
 lightgbm
 
 # LangChain requirements - updated
-langchain
-langchain-community
+langchain>=0.0.267
+langchain-community>=0.0.10
 langchain-openai
-langchain-huggingface
-faiss-cpu
+langchain-huggingface>=0.0.1
+faiss-cpu>=1.7.4
 tiktoken
 huggingface_hub
 transformers
-sentence_transformers
+sentence-transformers>=2.2.2
 
 # For document loading
 unstructured
 pdf2image
 pytesseract
+pillow>=9.5.0
+python-dotenv>=1.0.0
+pypdf>=3.15.1
