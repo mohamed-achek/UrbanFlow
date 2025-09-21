@@ -88,7 +88,8 @@ class UrbanFlowLangChainBot:
                 model_kwargs={
                     "temperature": 0.5,
                     "max_length": 512
-                }
+                },
+                task="text2text-generation"  # Specify the task to fix validation error
             )
             
             self.embeddings = HuggingFaceEmbeddings(
@@ -280,6 +281,16 @@ class UrbanFlowLangChainBot:
         
         # Default response
         return "I'm not sure about that. You can ask me about bike usage, weather impact, traffic patterns, or popular stations."
+
+    def get_api_status(self):
+        """Get the current API connection status"""
+        if self.is_using_fallback:
+            if self.api_key_message:
+                return f"Using fallback mode: {self.api_key_message}"
+            else:
+                return "Using fallback mode: No API key configured"
+        else:
+            return "Successfully connected to HuggingFace API"
 
 
 # Initialize with environment variables - using only HuggingFace
