@@ -53,13 +53,7 @@ st.markdown(
 # Display header image - fix the image path issue
 # Try multiple possible paths for the image
 possible_paths = [
-    "../assets/header.png", 
-    "../assets/Header.png",
-    "../Assets/header.png",
-    "../Assets/Header.png",
-    "assets/header.png",
-    "assets/Header.png",
-    "./assets/header.png",
+    "../assets/Header.png", 
 ]
 
 # Check if any of the possible paths exist
@@ -91,20 +85,54 @@ else:
 st.sidebar.title("UrbanFlow AI Controls")
 st.sidebar.markdown("Select filters and options to explore bike demand in NYC.")
 
-# Placeholder controls (to be implemented)
-st.sidebar.multiselect("Select Station(s)", options=["All"], default=["All"])
-st.sidebar.date_input("Date Range", [])
-st.sidebar.slider("Temperature (°C)", min_value=-10, max_value=40, value=(0,30))
-st.sidebar.slider("Precipitation (mm)", min_value=0, max_value=50, value=(0,10))
-st.sidebar.slider("Wind Speed (km/h)", min_value=0, max_value=50, value=(0,20))
-st.sidebar.checkbox("Include Traffic Data", value=False)
-st.sidebar.selectbox("Model Selector", options=["Best Model"], index=0)
-st.sidebar.button("Download Filtered Data")
+# Interactive controls that affect the data
+selected_stations = st.sidebar.multiselect(
+    "Select Station(s)", 
+    options=["All", "Central Park South", "Times Square", "Brooklyn Bridge", "Wall Street"], 
+    default=["All"]
+)
+
+# Date range filter
+import datetime
+date_range = st.sidebar.date_input(
+    "Date Range",
+    value=[datetime.date(2023, 1, 1), datetime.date(2023, 12, 31)],
+    min_value=datetime.date(2023, 1, 1),
+    max_value=datetime.date(2023, 12, 31)
+)
+
+# Weather filters
+temp_range = st.sidebar.slider("Temperature (°C)", min_value=-10, max_value=40, value=(0, 30))
+precip_range = st.sidebar.slider("Precipitation (mm)", min_value=0, max_value=50, value=(0, 10))
+wind_range = st.sidebar.slider("Wind Speed (km/h)", min_value=0, max_value=50, value=(0, 20))
+
+# Additional options
+include_traffic = st.sidebar.checkbox("Include Traffic Data", value=False)
+model_selector = st.sidebar.selectbox("Model Selector", options=["Random Forest", "XGBoost", "Neural Network"], index=0)
+
+# Apply filters button
+if st.sidebar.button("Apply Filters") or True:  # Auto-apply filters on any change
+    st.sidebar.success("✅ Filters applied successfully!")
+
+# Download button
+if st.sidebar.button("Download Filtered Data"):
+    st.sidebar.success("Data download feature coming soon!")
+
+# Show current filter summary in sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📊 Current Filter Summary")
+if len(date_range) == 2:
+    st.sidebar.write(f"📅 **Date**: {date_range[0]} to {date_range[1]}")
+st.sidebar.write(f"🌡️ **Temperature**: {temp_range[0]}°C to {temp_range[1]}°C")
+st.sidebar.write(f"🌧️ **Precipitation**: {precip_range[0]}-{precip_range[1]} mm")
+st.sidebar.write(f"💨 **Wind**: {wind_range[0]}-{wind_range[1]} km/h")
+st.sidebar.write(f"🚉 **Stations**: {', '.join(selected_stations) if 'All' not in selected_stations else 'All stations'}")
+st.sidebar.write(f"🤖 **Model**: {model_selector}")
 
 # Main page tabs
 st.title("UrbanFlow AI: Smart Bike Demand Forecasting in NYC")
 
-# Helper function to load sample data
+# Helper function to load and filter sample data
 @st.cache_data
 def load_sample_data():
     """Load and return sample data for demonstration"""
@@ -126,20 +154,66 @@ def load_sample_data():
     
     # If no real data found, create sample data
     np.random.seed(42)
-    dates = pd.date_range(start='2023-01-01', periods=100, freq='H')
+    dates = pd.date_range(start='2023-01-01', periods=1000, freq='H')
     sample_data = pd.DataFrame({
         'datetime': dates,
-        'trip_count': np.random.poisson(50, 100) + np.random.normal(0, 10, 100).astype(int),
-        'temperature': np.random.normal(15, 10, 100),
-        'precipitation': np.random.exponential(2, 100),
-        'station_id': np.random.choice(['A', 'B', 'C', 'D'], 100),
+        'trip_count': np.random.poisson(50, 1000) + np.random.normal(0, 10, 1000).astype(int),
+        'temperature': np.random.normal(15, 10, 1000),
+        'precipitation': np.random.exponential(2, 1000),
+        'wind_speed': np.random.normal(15, 5, 1000),
+        'station_id': np.random.choice(['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street'], 1000),
         'weekday': [d.weekday() for d in dates],
         'hour': [d.hour for d in dates]
     })
     return sample_data
 
+def filter_data(df, stations, temp_range, precip_range, wind_range, date_range):
+    """Filter data based on sidebar controls"""
+    filtered_df = df.copy()
+    
+    # Filter by stations
+    if "All" not in stations and len(stations) > 0:
+        if 'station_id' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['station_id'].isin(stations)]
+    
+    # Filter by temperature
+    if 'temperature' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['temperature'] >= temp_range[0]) & 
+            (filtered_df['temperature'] <= temp_range[1])
+        ]
+    
+    # Filter by precipitation
+    if 'precipitation' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['precipitation'] >= precip_range[0]) & 
+            (filtered_df['precipitation'] <= precip_range[1])
+        ]
+    
+    # Filter by wind speed
+    if 'wind_speed' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['wind_speed'] >= wind_range[0]) & 
+            (filtered_df['wind_speed'] <= wind_range[1])
+        ]
+    
+    # Filter by date range
+    if 'datetime' in filtered_df.columns and len(date_range) == 2:
+        filtered_df['datetime'] = pd.to_datetime(filtered_df['datetime'])
+        start_date = pd.to_datetime(date_range[0])
+        end_date = pd.to_datetime(date_range[1])
+        filtered_df = filtered_df[
+            (filtered_df['datetime'].dt.date >= start_date.date()) & 
+            (filtered_df['datetime'].dt.date <= end_date.date())
+        ]
+    
+    return filtered_df
+
 # Load data once
-sample_data = load_sample_data()
+raw_data = load_sample_data()
+
+# Apply filters to the data
+sample_data = filter_data(raw_data, selected_stations, temp_range, precip_range, wind_range, date_range)
 tabs = st.tabs([
     "Dashboard Overview",
     "Station Usage Map",
@@ -152,76 +226,154 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("Dashboard Overview")
     
+    # Show active filters
+    st.subheader("🔍 Active Filters")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Stations", f"{len(selected_stations) if 'All' not in selected_stations else 'All'}")
+        st.metric("Temperature Range", f"{temp_range[0]}°C to {temp_range[1]}°C")
+    with col2:
+        st.metric("Precipitation", f"{precip_range[0]}-{precip_range[1]} mm")
+        st.metric("Wind Speed", f"{wind_range[0]}-{wind_range[1]} km/h")
+    with col3:
+        if len(date_range) == 2:
+            st.metric("Date Range", f"{date_range[0]} to {date_range[1]}")
+        st.metric("Data Points", f"{len(sample_data):,}")
+    
     # Key Performance Indicators
+    st.subheader("📊 Key Performance Indicators")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_trips = sample_data['trip_count'].sum() if 'trip_count' in sample_data.columns else 12543
+        total_trips = sample_data['trip_count'].sum() if 'trip_count' in sample_data.columns and not sample_data.empty else 0
         st.metric("Total Trips", f"{total_trips:,}")
     
     with col2:
-        avg_temp = sample_data['temperature'].mean() if 'temperature' in sample_data.columns else 18.5
+        avg_temp = sample_data['temperature'].mean() if 'temperature' in sample_data.columns and not sample_data.empty else 0
         st.metric("Avg Temperature", f"{avg_temp:.1f}°C")
     
     with col3:
-        peak_hour = sample_data.groupby('hour')['trip_count'].sum().idxmax() if 'hour' in sample_data.columns else 17
+        if 'hour' in sample_data.columns and not sample_data.empty:
+            peak_hour = sample_data.groupby('hour')['trip_count'].sum().idxmax()
+        else:
+            peak_hour = 17
         st.metric("Peak Hour", f"{peak_hour}:00")
     
     with col4:
-        busiest_station = sample_data.groupby('station_id')['trip_count'].sum().idxmax() if 'station_id' in sample_data.columns else "Central Station"
+        if 'station_id' in sample_data.columns and not sample_data.empty:
+            busiest_station = sample_data.groupby('station_id')['trip_count'].sum().idxmax()
+        else:
+            busiest_station = "No data"
         st.metric("Busiest Station", busiest_station)
     
-    # Time series chart
-    st.subheader("Trip Count Over Time")
-    if 'datetime' in sample_data.columns and 'trip_count' in sample_data.columns:
-        fig = px.line(sample_data, x='datetime', y='trip_count', 
-                     title='Bike Trip Demand Over Time')
-        st.plotly_chart(fig, use_container_width=True)
+    # Check if we have data after filtering
+    if sample_data.empty:
+        st.warning("⚠️ No data matches the current filter criteria. Please adjust your filters.")
     else:
-        st.info("Time series data not available in current dataset.")
-    
-    # Weather correlation
-    st.subheader("Weather Impact on Bike Usage")
-    if 'temperature' in sample_data.columns and 'trip_count' in sample_data.columns:
-        fig = px.scatter(sample_data, x='temperature', y='trip_count', 
-                        title='Temperature vs Trip Count',
-                        labels={'temperature': 'Temperature (°C)', 'trip_count': 'Number of Trips'})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Weather correlation data not available.")
+        # Time series chart
+        st.subheader("📈 Trip Count Over Time")
+        if 'datetime' in sample_data.columns and 'trip_count' in sample_data.columns:
+            # Aggregate by day for better visualization
+            daily_data = sample_data.copy()
+            daily_data['date'] = pd.to_datetime(daily_data['datetime']).dt.date
+            daily_summary = daily_data.groupby('date')['trip_count'].sum().reset_index()
+            
+            fig = px.line(daily_summary, x='date', y='trip_count', 
+                         title='Bike Trip Demand Over Time (Filtered Data)',
+                         labels={'date': 'Date', 'trip_count': 'Total Daily Trips'})
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Time series data not available in current dataset.")
+        
+        # Weather correlation
+        st.subheader("🌤️ Weather Impact on Bike Usage")
+        if 'temperature' in sample_data.columns and 'trip_count' in sample_data.columns:
+            fig = px.scatter(sample_data, x='temperature', y='trip_count', 
+                            title='Temperature vs Trip Count (Filtered Data)',
+                            labels={'temperature': 'Temperature (°C)', 'trip_count': 'Number of Trips'},
+                            color='precipitation' if 'precipitation' in sample_data.columns else None,
+                            color_continuous_scale='Blues')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Weather correlation data not available.")
+        
+        # Show filter impact
+        original_count = len(raw_data)
+        filtered_count = len(sample_data)
+        filter_percentage = (filtered_count / original_count) * 100 if original_count > 0 else 0
+        
+        st.info(f"📊 Filters applied: Showing {filtered_count:,} of {original_count:,} data points ({filter_percentage:.1f}%)")
 
 with tabs[1]:
     st.header("Station Usage Map")
     
-    # NYC coordinates for sample stations
-    nyc_stations = pd.DataFrame({
-        'station_id': ['A', 'B', 'C', 'D'],
-        'station_name': ['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street'],
-        'latitude': [40.7677, 40.7580, 40.7061, 40.7074],
-        'longitude': [-73.9796, -73.9855, -73.9969, -74.0113],
-        'trip_count': [250, 180, 220, 150]
-    })
+    # Create dynamic station data based on filters
+    all_stations = ['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street']
+    if "All" not in selected_stations and len(selected_stations) > 0:
+        stations_to_show = selected_stations
+    else:
+        stations_to_show = all_stations
     
-    # Create map visualization
-    st.subheader("Popular Bike Stations in NYC")
-    fig = px.scatter_map(nyc_stations, 
-                        lat="latitude", 
-                        lon="longitude", 
-                        size="trip_count",
-                        color="trip_count",
-                        hover_name="station_name",
-                        hover_data=["station_id", "trip_count"],
-                        color_continuous_scale="Viridis",
-                        size_max=20,
-                        zoom=11,
-                        height=500)
+    # Calculate trip counts for each station from filtered data
+    if 'station_id' in sample_data.columns and not sample_data.empty:
+        station_trips = sample_data.groupby('station_id')['trip_count'].sum().reset_index()
+        station_trips = station_trips[station_trips['station_id'].isin(stations_to_show)]
+    else:
+        # Fallback data
+        station_trips = pd.DataFrame({
+            'station_id': stations_to_show,
+            'trip_count': [250, 180, 220, 150][:len(stations_to_show)]
+        })
     
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-    st.plotly_chart(fig, use_container_width=True)
+    # NYC coordinates for stations
+    coordinates = {
+        'Central Park South': {'lat': 40.7677, 'lon': -73.9796},
+        'Times Square': {'lat': 40.7580, 'lon': -73.9855},
+        'Brooklyn Bridge': {'lat': 40.7061, 'lon': -73.9969},
+        'Wall Street': {'lat': 40.7074, 'lon': -74.0113}
+    }
     
-    # Station statistics
-    st.subheader("Station Usage Statistics")
-    st.dataframe(nyc_stations[['station_name', 'trip_count']].sort_values('trip_count', ascending=False))
+    # Create enhanced station data
+    nyc_stations = []
+    for _, row in station_trips.iterrows():
+        station_id = row['station_id']
+        if station_id in coordinates:
+            nyc_stations.append({
+                'station_id': station_id,
+                'station_name': station_id,
+                'latitude': coordinates[station_id]['lat'],
+                'longitude': coordinates[station_id]['lon'],
+                'trip_count': row['trip_count']
+            })
+    
+    nyc_stations = pd.DataFrame(nyc_stations)
+    
+    if not nyc_stations.empty:
+        # Create map visualization
+        st.subheader(f"Popular Bike Stations in NYC (Filtered: {len(nyc_stations)} stations)")
+        fig = px.scatter_map(nyc_stations, 
+                            lat="latitude", 
+                            lon="longitude", 
+                            size="trip_count",
+                            color="trip_count",
+                            hover_name="station_name",
+                            hover_data=["station_id", "trip_count"],
+                            color_continuous_scale="Viridis",
+                            size_max=20,
+                            zoom=11,
+                            height=500,
+                            title=f"Station Usage (Total trips: {nyc_stations['trip_count'].sum():,})")
+        
+        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Station statistics
+        st.subheader("Station Usage Statistics")
+        station_stats = nyc_stations[['station_name', 'trip_count']].sort_values('trip_count', ascending=False)
+        station_stats['percentage'] = (station_stats['trip_count'] / station_stats['trip_count'].sum() * 100).round(1)
+        st.dataframe(station_stats, use_container_width=True)
+    else:
+        st.warning("⚠️ No stations match the current filter criteria.")
 
 with tabs[2]:
     st.header("Forecasting Panel")
@@ -312,57 +464,78 @@ with tabs[2]:
 with tabs[3]:
     st.header("Exploratory Insights")
     
-    # Usage patterns by hour
-    st.subheader("Usage Patterns by Hour of Day")
-    if 'hour' in sample_data.columns and 'trip_count' in sample_data.columns:
-        hourly_usage = sample_data.groupby('hour')['trip_count'].mean().reset_index()
-        fig = px.bar(hourly_usage, x='hour', y='trip_count',
-                    title='Average Trips by Hour of Day',
-                    labels={'hour': 'Hour of Day', 'trip_count': 'Average Trips'})
-        st.plotly_chart(fig, use_container_width=True)
+    if sample_data.empty:
+        st.warning("⚠️ No data available for the current filters. Please adjust your criteria.")
     else:
-        # Sample hourly pattern
-        hours = list(range(24))
-        trips = [15, 10, 8, 12, 25, 45, 85, 95, 75, 55, 60, 65, 70, 75, 80, 75, 85, 95, 90, 70, 50, 35, 25, 20]
-        hourly_df = pd.DataFrame({'hour': hours, 'avg_trips': trips})
-        fig = px.bar(hourly_df, x='hour', y='avg_trips',
-                    title='Average Trips by Hour of Day (Sample Data)')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Weekday vs Weekend analysis
-    st.subheader("Weekday vs Weekend Usage")
-    weekday_data = pd.DataFrame({
-        'day_type': ['Weekday', 'Weekend'],
-        'avg_trips': [65, 45],
-        'peak_hour': ['8 AM & 6 PM', '2 PM']
-    })
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = px.pie(weekday_data, values='avg_trips', names='day_type',
-                    title='Average Daily Usage Distribution')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.write("**Usage Insights:**")
-        st.write("• Weekday peak: Commute hours (8 AM, 6 PM)")
-        st.write("• Weekend peak: Afternoon leisure (2 PM)")
-        st.write("• Weekend usage 31% lower than weekdays")
-        st.write("• Electric bikes used for longer trips")
-    
-    # Weather impact analysis
-    st.subheader("Weather Impact on Usage")
-    weather_impact = pd.DataFrame({
-        'condition': ['Sunny', 'Cloudy', 'Light Rain', 'Heavy Rain', 'Snow'],
-        'usage_change': [100, 85, 60, 30, 15],
-        'avg_trips': [80, 68, 48, 24, 12]
-    })
-    
-    fig = px.bar(weather_impact, x='condition', y='usage_change',
-                title='Relative Usage by Weather Condition (%)',
-                color='usage_change',
-                color_continuous_scale='RdYlGn')
-    st.plotly_chart(fig, use_container_width=True)
+        # Usage patterns by hour
+        st.subheader("📊 Usage Patterns by Hour of Day (Filtered Data)")
+        if 'hour' in sample_data.columns and 'trip_count' in sample_data.columns:
+            hourly_usage = sample_data.groupby('hour')['trip_count'].mean().reset_index()
+            fig = px.bar(hourly_usage, x='hour', y='trip_count',
+                        title=f'Average Trips by Hour of Day ({len(sample_data):,} data points)',
+                        labels={'hour': 'Hour of Day', 'trip_count': 'Average Trips'},
+                        color='trip_count',
+                        color_continuous_scale='viridis')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Sample hourly pattern
+            hours = list(range(24))
+            trips = [15, 10, 8, 12, 25, 45, 85, 95, 75, 55, 60, 65, 70, 75, 80, 75, 85, 95, 90, 70, 50, 35, 25, 20]
+            hourly_df = pd.DataFrame({'hour': hours, 'avg_trips': trips})
+            fig = px.bar(hourly_df, x='hour', y='avg_trips',
+                        title='Average Trips by Hour of Day (Sample Data)')
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Show weather impact based on current data
+        st.subheader("🌤️ Weather Impact Analysis (Current Filters)")
+        if 'temperature' in sample_data.columns and 'precipitation' in sample_data.columns:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Temperature distribution
+                fig_temp = px.histogram(sample_data, x='temperature', nbins=20,
+                                       title='Temperature Distribution in Filtered Data',
+                                       labels={'temperature': 'Temperature (°C)', 'count': 'Frequency'})
+                st.plotly_chart(fig_temp, use_container_width=True)
+            
+            with col2:
+                # Precipitation vs trips
+                fig_precip = px.scatter(sample_data, x='precipitation', y='trip_count',
+                                       title='Precipitation vs Trip Count',
+                                       labels={'precipitation': 'Precipitation (mm)', 'trip_count': 'Trips'},
+                                       color='temperature')
+                st.plotly_chart(fig_precip, use_container_width=True)
+        
+        # Station-specific insights
+        if 'station_id' in sample_data.columns:
+            st.subheader("🚉 Station-Specific Insights")
+            station_summary = sample_data.groupby('station_id').agg({
+                'trip_count': ['sum', 'mean', 'std'],
+                'temperature': 'mean',
+                'precipitation': 'mean'
+            }).round(2)
+            
+            station_summary.columns = ['Total Trips', 'Avg Trips', 'Trip Std Dev', 'Avg Temp (°C)', 'Avg Precip (mm)']
+            st.dataframe(station_summary, use_container_width=True)
+        
+        # Summary insights based on filtered data
+        st.subheader("📋 Key Insights from Filtered Data")
+        total_trips = sample_data['trip_count'].sum()
+        avg_temp = sample_data['temperature'].mean() if 'temperature' in sample_data.columns else None
+        avg_precip = sample_data['precipitation'].mean() if 'precipitation' in sample_data.columns else None
+        
+        insights = []
+        insights.append(f"• Total trips in filtered period: {total_trips:,}")
+        if avg_temp is not None:
+            insights.append(f"• Average temperature: {avg_temp:.1f}°C")
+        if avg_precip is not None:
+            insights.append(f"• Average precipitation: {avg_precip:.1f}mm")
+        if 'hour' in sample_data.columns:
+            peak_hour = sample_data.groupby('hour')['trip_count'].sum().idxmax()
+            insights.append(f"• Peak usage hour: {peak_hour}:00")
+        
+        for insight in insights:
+            st.write(insight)
 
 with tabs[4]:
     st.header("AI & Explainability")

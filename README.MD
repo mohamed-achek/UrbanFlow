@@ -148,6 +148,17 @@ data/final/
 - [ ] Personalized recommendations
 - [ ] Rebalancing optimization algorithms
 
+## 🚀 Deployment
+
+The application is optimized for **Streamlit Cloud** deployment:
+
+1. Push your code to GitHub
+2. Go to https://share.streamlit.io
+3. Connect your repository and set main file to `app/main.py`
+4. Deploy instantly!
+
+See `STREAMLIT_DEPLOYMENT.md` for detailed step-by-step instructions.
+
 ## 🤝 Contributing
 
 1. Fork the repository

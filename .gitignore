@@ -7,6 +7,7 @@
 .env.*
 *.env
 api_keys.txt
+.streamlit/secrets.toml
 
 # Python environments
 venv/
@@ -48,6 +49,17 @@ ipython_config.py
 # Logs and databases
 *.log
 *.sqlite
+
+# Deployment specific
+.docker/
+docker-compose.override.yml
+.railway/
+.vercel/
+.heroku/
+
+# Cache directories
+.cache/
+.streamlit/
 *.db
 
 # Temporary files
