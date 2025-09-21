@@ -53,7 +53,10 @@ st.markdown(
 # Display header image - fix the image path issue
 # Try multiple possible paths for the image
 possible_paths = [
-    "../assets/Header.png", 
+    "Assets/Header.png",     # From root directory (when run with streamlit)
+    "../Assets/Header.png",  # From app directory (fallback)
+    "./Assets/Header.png",   # Current directory relative
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "Assets", "Header.png")  # Absolute path
 ]
 
 # Check if any of the possible paths exist
@@ -65,21 +68,24 @@ for path in possible_paths:
 
 # If image not found, try to create the assets directory and display a message
 if header_image_path is None:
-    # Create assets directory if it doesn't exist
-    assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
-    os.makedirs(assets_dir, exist_ok=True)
+    st.warning("🖼️ Header image not found. Looking for 'Header.png' in Assets directory.")
+    st.info(f"📁 Current working directory: {os.getcwd()}")
+    st.info(f"📍 Script location: {os.path.dirname(__file__)}")
     
-    # Display a notice about the missing image
-    st.warning(f"Header image not found. Please add a header image to the 'assets' directory.")
-    
-    # Create a title as fallback
+    # Create a styled title as fallback
     st.markdown('<h1 class="title-text">UrbanFlow AI</h1>', unsafe_allow_html=True)
     st.markdown('<p class="subtitle-text">Smart Bike Demand Forecasting in NYC</p>', unsafe_allow_html=True)
 else:
-    # Image found, display it with smaller width
+    # Image found, display it with responsive sizing
     col1, col2, col3 = st.columns([1, 2, 1])  # Create 3 columns for layout
     with col2:  # Use the middle column to display the image
-        st.image(header_image_path, width=500)  # Set a fixed width of 500 pixels
+        try:
+            image = Image.open(header_image_path)
+            st.image(image, width=500, caption="UrbanFlow AI - Smart Urban Mobility Analytics")
+        except Exception as e:
+            st.error(f"Error loading image: {str(e)}")
+            st.markdown('<h1 class="title-text">UrbanFlow AI</h1>', unsafe_allow_html=True)
+            st.markdown('<p class="subtitle-text">Smart Bike Demand Forecasting in NYC</p>', unsafe_allow_html=True)
 
 # Sidebar controls
 st.sidebar.title("UrbanFlow AI Controls")
@@ -93,12 +99,11 @@ selected_stations = st.sidebar.multiselect(
 )
 
 # Date range filter
-import datetime
 date_range = st.sidebar.date_input(
     "Date Range",
-    value=[datetime.date(2023, 1, 1), datetime.date(2023, 12, 31)],
-    min_value=datetime.date(2023, 1, 1),
-    max_value=datetime.date(2023, 12, 31)
+    value=[datetime(2023, 1, 1).date(), datetime(2023, 12, 31).date()],
+    min_value=datetime(2023, 1, 1).date(),
+    max_value=datetime(2023, 12, 31).date()
 )
 
 # Weather filters
@@ -132,36 +137,51 @@ st.sidebar.write(f"🤖 **Model**: {model_selector}")
 # Main page tabs
 st.title("UrbanFlow AI: Smart Bike Demand Forecasting in NYC")
 
+# Data notice
+st.warning("""
+🗂️ **Data Notice:** This demo uses sample datasets (5,000 rows each) due to GitHub file size limitations. 
+The original datasets contain millions of records and are too large for repository hosting:
+- Original data: ~9GB (40M+ records)  
+- Sample datasets provide representative analysis and full functionality demonstration
+""")
+
 # Helper function to load and filter sample data
 @st.cache_data
 def load_sample_data():
-    """Load and return sample data for demonstration"""
-    # Try to load actual data first
-    data_paths = [
-        "../data/final/merged_dataset_20250720_170853.csv",
-        "../data/final/citibike_engineered_20250719_161523.csv",
-        "../data/processed/citibike_cleaned.csv"
+    """Load sample datasets for demonstration"""
+    # Try to load sample data first
+    sample_paths = [
+        "data/samples/merged_dataset_sample.csv",
+        "data/samples/citibike_sample.csv",
+        "data/final/merged_dataset_20250720_170853.csv",  # Local fallback
+        "data/final/citibike_engineered_20250719_161523.csv"
     ]
     
-    for path in data_paths:
+    for path in sample_paths:
         if os.path.exists(path):
             try:
                 df = pd.read_csv(path)
                 if not df.empty:
-                    return df.head(1000)  # Limit to 1000 rows for performance
+                    if "sample" in path:
+                        st.info(f"✅ Loaded sample dataset: {len(df):,} rows from {os.path.basename(path)}")
+                    else:
+                        st.info(f"✅ Loaded full local dataset: {len(df):,} rows (limited to 10,000 for performance)")
+                        df = df.head(10000)  # Limit for performance
+                    return df
             except Exception as e:
                 continue
     
-    # If no real data found, create sample data
+    # If no sample or real data found, create synthetic sample data
+    st.warning("⚠️ No sample datasets found. Generating synthetic data for demonstration.")
     np.random.seed(42)
-    dates = pd.date_range(start='2023-01-01', periods=1000, freq='H')
+    dates = pd.date_range(start='2023-01-01', periods=5000, freq='H')
     sample_data = pd.DataFrame({
         'datetime': dates,
-        'trip_count': np.random.poisson(50, 1000) + np.random.normal(0, 10, 1000).astype(int),
-        'temperature': np.random.normal(15, 10, 1000),
-        'precipitation': np.random.exponential(2, 1000),
-        'wind_speed': np.random.normal(15, 5, 1000),
-        'station_id': np.random.choice(['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street'], 1000),
+        'demand_count': np.random.poisson(50, 5000) + np.random.normal(0, 10, 5000).astype(int),
+        'temperature_2m': np.random.normal(15, 10, 5000),
+        'precipitation': np.random.exponential(0.5, 5000),
+        'wind_speed_10m': np.random.normal(15, 5, 5000),
+        'start_station_name': np.random.choice(['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street'], 5000),
         'weekday': [d.weekday() for d in dates],
         'hour': [d.hour for d in dates]
     })
@@ -245,26 +265,26 @@ with tabs[0]:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        total_trips = sample_data['trip_count'].sum() if 'trip_count' in sample_data.columns and not sample_data.empty else 0
+        total_trips = sample_data['demand_count'].sum() if 'demand_count' in sample_data.columns and not sample_data.empty else 0
         st.metric("Total Trips", f"{total_trips:,}")
     
     with col2:
-        avg_temp = sample_data['temperature'].mean() if 'temperature' in sample_data.columns and not sample_data.empty else 0
+        avg_temp = sample_data['temperature_2m'].mean() if 'temperature_2m' in sample_data.columns and not sample_data.empty else 0
         st.metric("Avg Temperature", f"{avg_temp:.1f}°C")
     
     with col3:
         if 'hour' in sample_data.columns and not sample_data.empty:
-            peak_hour = sample_data.groupby('hour')['trip_count'].sum().idxmax()
+            peak_hour = sample_data.groupby('hour')['demand_count'].sum().idxmax()
         else:
             peak_hour = 17
         st.metric("Peak Hour", f"{peak_hour}:00")
     
     with col4:
-        if 'station_id' in sample_data.columns and not sample_data.empty:
-            busiest_station = sample_data.groupby('station_id')['trip_count'].sum().idxmax()
+        if 'start_station_name' in sample_data.columns and not sample_data.empty:
+            busiest_station = sample_data.groupby('start_station_name')['demand_count'].sum().idxmax()
         else:
             busiest_station = "No data"
-        st.metric("Busiest Station", busiest_station)
+        st.metric("Busiest Station", busiest_station[:15] + "..." if len(busiest_station) > 15 else busiest_station)
     
     # Check if we have data after filtering
     if sample_data.empty:
@@ -272,25 +292,25 @@ with tabs[0]:
     else:
         # Time series chart
         st.subheader("📈 Trip Count Over Time")
-        if 'datetime' in sample_data.columns and 'trip_count' in sample_data.columns:
+        if 'datetime_hour' in sample_data.columns and 'demand_count' in sample_data.columns:
             # Aggregate by day for better visualization
             daily_data = sample_data.copy()
-            daily_data['date'] = pd.to_datetime(daily_data['datetime']).dt.date
-            daily_summary = daily_data.groupby('date')['trip_count'].sum().reset_index()
+            daily_data['date'] = pd.to_datetime(daily_data['datetime_hour']).dt.date
+            daily_summary = daily_data.groupby('date')['demand_count'].sum().reset_index()
             
-            fig = px.line(daily_summary, x='date', y='trip_count', 
+            fig = px.line(daily_summary, x='date', y='demand_count', 
                          title='Bike Trip Demand Over Time (Filtered Data)',
-                         labels={'date': 'Date', 'trip_count': 'Total Daily Trips'})
+                         labels={'date': 'Date', 'demand_count': 'Total Daily Trips'})
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Time series data not available in current dataset.")
         
         # Weather correlation
         st.subheader("🌤️ Weather Impact on Bike Usage")
-        if 'temperature' in sample_data.columns and 'trip_count' in sample_data.columns:
-            fig = px.scatter(sample_data, x='temperature', y='trip_count', 
+        if 'temperature_2m' in sample_data.columns and 'demand_count' in sample_data.columns:
+            fig = px.scatter(sample_data, x='temperature_2m', y='demand_count', 
                             title='Temperature vs Trip Count (Filtered Data)',
-                            labels={'temperature': 'Temperature (°C)', 'trip_count': 'Number of Trips'},
+                            labels={'temperature_2m': 'Temperature (°C)', 'demand_count': 'Number of Trips'},
                             color='precipitation' if 'precipitation' in sample_data.columns else None,
                             color_continuous_scale='Blues')
             st.plotly_chart(fig, use_container_width=True)

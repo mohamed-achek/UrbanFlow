@@ -1,5 +1,12 @@
-# Data directories
-/data
+# Large data directories (exclude due to size)
+/data/final/
+/data/raw/
+/data/processed/
+
+# Keep sample data for demonstration
+!/data/samples/
+
+# Virtual environment
 /urbanflow
 
 # Environment variables and secrets
