@@ -32,12 +32,27 @@ except ImportError:
     from langchain_community.llms import HuggingFaceHub
     print("Using HuggingFace components from langchain_community")
 
-from langchain_community.vectorstores import FAISS
+# Try to import FAISS, but make it optional for deployment
+try:
+    from langchain_community.vectorstores import FAISS
+    FAISS_AVAILABLE = True
+    print("FAISS vector store available")
+except ImportError:
+    FAISS_AVAILABLE = False
+    print("FAISS not available - vector search will be disabled")
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
-from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader, PyPDFLoader
+from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
+
+# Only import PyPDFLoader if available
+try:
+    from langchain_community.document_loaders import PyPDFLoader
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
 
 class UrbanFlowLangChainBot:
     def __init__(self):  # Removed use_openai parameter
@@ -195,20 +210,25 @@ class UrbanFlowLangChainBot:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
             texts = text_splitter.split_documents(documents)
             
-            # Create vector store
-            self.vector_store = FAISS.from_documents(texts, self.embeddings)
+            # Create vector store only if FAISS is available
+            if FAISS_AVAILABLE:
+                self.vector_store = FAISS.from_documents(texts, self.embeddings)
+                
+                # Create conversation chain with retrieval
+                retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
+                self.conversation_chain = ConversationalRetrievalChain.from_llm(
+                    llm=self.llm,
+                    retriever=retriever,
+                    memory=self.memory,
+                    return_source_documents=True
+                )
+            else:
+                # Fallback: basic conversation without vector search
+                self.vector_store = None
+                self.conversation_chain = None
+                print("Vector search disabled - using basic response mode")
             
-            # Create conversation chain
-            retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
-            self.conversation_chain = ConversationalRetrievalChain.from_llm(
-                llm=self.llm,
-                retriever=retriever,
-                memory=self.memory,
-                return_source_documents=False,
-                verbose=False
-            )
-            
-            print(f"Created vector store with {len(texts)} text chunks")
+            print(f"Created vector store with {len(texts) if FAISS_AVAILABLE else 0} text chunks")
         else:
             print("No documents found to create vector store")
     
