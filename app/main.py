@@ -193,14 +193,16 @@ def filter_data(df, stations, temp_range, precip_range, wind_range, date_range):
     
     # Filter by stations
     if "All" not in stations and len(stations) > 0:
-        if 'station_id' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['station_id'].isin(stations)]
+        if 'start_station_name' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['start_station_name'].isin(stations)]
+        elif 'start_station_id' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['start_station_id'].isin(stations)]
     
     # Filter by temperature
-    if 'temperature' in filtered_df.columns:
+    if 'temperature_2m' in filtered_df.columns:
         filtered_df = filtered_df[
-            (filtered_df['temperature'] >= temp_range[0]) & 
-            (filtered_df['temperature'] <= temp_range[1])
+            (filtered_df['temperature_2m'] >= temp_range[0]) & 
+            (filtered_df['temperature_2m'] <= temp_range[1])
         ]
     
     # Filter by precipitation
@@ -211,10 +213,10 @@ def filter_data(df, stations, temp_range, precip_range, wind_range, date_range):
         ]
     
     # Filter by wind speed
-    if 'wind_speed' in filtered_df.columns:
+    if 'wind_speed_10m' in filtered_df.columns:
         filtered_df = filtered_df[
-            (filtered_df['wind_speed'] >= wind_range[0]) & 
-            (filtered_df['wind_speed'] <= wind_range[1])
+            (filtered_df['wind_speed_10m'] >= wind_range[0]) & 
+            (filtered_df['wind_speed_10m'] <= wind_range[1])
         ]
     
     # Filter by date range
@@ -335,14 +337,14 @@ with tabs[1]:
         stations_to_show = all_stations
     
     # Calculate trip counts for each station from filtered data
-    if 'station_id' in sample_data.columns and not sample_data.empty:
-        station_trips = sample_data.groupby('station_id')['trip_count'].sum().reset_index()
-        station_trips = station_trips[station_trips['station_id'].isin(stations_to_show)]
+    if 'start_station_id' in sample_data.columns and not sample_data.empty:
+        station_trips = sample_data.groupby('start_station_id')['demand_count'].sum().reset_index() if 'start_station_id' in sample_data.columns else pd.DataFrame()
+        station_trips = station_trips[station_trips['start_station_id'].isin(stations_to_show)]
     else:
         # Fallback data
         station_trips = pd.DataFrame({
-            'station_id': stations_to_show,
-            'trip_count': [250, 180, 220, 150][:len(stations_to_show)]
+            'start_station_id': stations_to_show,
+            'demand_count': [250, 180, 220, 150][:len(stations_to_show)]
         })
     
     # NYC coordinates for stations
@@ -356,14 +358,14 @@ with tabs[1]:
     # Create enhanced station data
     nyc_stations = []
     for _, row in station_trips.iterrows():
-        station_id = row['station_id']
+        station_id = row['start_station_id']
         if station_id in coordinates:
             nyc_stations.append({
                 'station_id': station_id,
                 'station_name': station_id,
                 'latitude': coordinates[station_id]['lat'],
                 'longitude': coordinates[station_id]['lon'],
-                'trip_count': row['trip_count']
+                'demand_count': row['demand_count']
             })
     
     nyc_stations = pd.DataFrame(nyc_stations)
@@ -374,23 +376,23 @@ with tabs[1]:
         fig = px.scatter_map(nyc_stations, 
                             lat="latitude", 
                             lon="longitude", 
-                            size="trip_count",
-                            color="trip_count",
+                            size="demand_count",
+                            color="demand_count",
                             hover_name="station_name",
-                            hover_data=["station_id", "trip_count"],
+                            hover_data=["station_id", "demand_count"],
                             color_continuous_scale="Viridis",
                             size_max=20,
                             zoom=11,
                             height=500,
-                            title=f"Station Usage (Total trips: {nyc_stations['trip_count'].sum():,})")
+                            title=f"Station Usage (Total trips: {nyc_stations['demand_count'].sum():,})")
         
         fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
         st.plotly_chart(fig, use_container_width=True)
         
         # Station statistics
         st.subheader("Station Usage Statistics")
-        station_stats = nyc_stations[['station_name', 'trip_count']].sort_values('trip_count', ascending=False)
-        station_stats['percentage'] = (station_stats['trip_count'] / station_stats['trip_count'].sum() * 100).round(1)
+        station_stats = nyc_stations[['station_name', 'demand_count']].sort_values('demand_count', ascending=False)
+        station_stats['percentage'] = (station_stats['demand_count'] / station_stats['demand_count'].sum() * 100).round(1)
         st.dataframe(station_stats, use_container_width=True)
     else:
         st.warning("⚠️ No stations match the current filter criteria.")
@@ -489,12 +491,12 @@ with tabs[3]:
     else:
         # Usage patterns by hour
         st.subheader("📊 Usage Patterns by Hour of Day (Filtered Data)")
-        if 'hour' in sample_data.columns and 'trip_count' in sample_data.columns:
-            hourly_usage = sample_data.groupby('hour')['trip_count'].mean().reset_index()
-            fig = px.bar(hourly_usage, x='hour', y='trip_count',
+        if 'hour' in sample_data.columns and 'demand_count' in sample_data.columns:
+            hourly_usage = sample_data.groupby('hour')['demand_count'].mean().reset_index()
+            fig = px.bar(hourly_usage, x='hour', y='demand_count',
                         title=f'Average Trips by Hour of Day ({len(sample_data):,} data points)',
-                        labels={'hour': 'Hour of Day', 'trip_count': 'Average Trips'},
-                        color='trip_count',
+                        labels={'hour': 'Hour of Day', 'demand_count': 'Average Trips'},
+                        color='demand_count',
                         color_continuous_scale='viridis')
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -520,18 +522,18 @@ with tabs[3]:
             
             with col2:
                 # Precipitation vs trips
-                fig_precip = px.scatter(sample_data, x='precipitation', y='trip_count',
+                fig_precip = px.scatter(sample_data, x='precipitation', y='demand_count',
                                        title='Precipitation vs Trip Count',
-                                       labels={'precipitation': 'Precipitation (mm)', 'trip_count': 'Trips'},
-                                       color='temperature')
+                                       labels={'precipitation': 'Precipitation (mm)', 'demand_count': 'Trips'},
+                                       color='temperature_2m')
                 st.plotly_chart(fig_precip, use_container_width=True)
         
         # Station-specific insights
-        if 'station_id' in sample_data.columns:
+        if 'start_station_id' in sample_data.columns:
             st.subheader("🚉 Station-Specific Insights")
-            station_summary = sample_data.groupby('station_id').agg({
-                'trip_count': ['sum', 'mean', 'std'],
-                'temperature': 'mean',
+            station_summary = sample_data.groupby('start_station_id').agg({
+                'demand_count': ['sum', 'mean', 'std'],
+                'temperature_2m': 'mean',
                 'precipitation': 'mean'
             }).round(2)
             
@@ -540,8 +542,8 @@ with tabs[3]:
         
         # Summary insights based on filtered data
         st.subheader("📋 Key Insights from Filtered Data")
-        total_trips = sample_data['trip_count'].sum()
-        avg_temp = sample_data['temperature'].mean() if 'temperature' in sample_data.columns else None
+        total_trips = sample_data['demand_count'].sum()
+        avg_temp = sample_data['temperature_2m'].mean() if 'temperature_2m' in sample_data.columns else None
         avg_precip = sample_data['precipitation'].mean() if 'precipitation' in sample_data.columns else None
         
         insights = []
@@ -551,7 +553,7 @@ with tabs[3]:
         if avg_precip is not None:
             insights.append(f"• Average precipitation: {avg_precip:.1f}mm")
         if 'hour' in sample_data.columns:
-            peak_hour = sample_data.groupby('hour')['trip_count'].sum().idxmax()
+            peak_hour = sample_data.groupby('hour')['demand_count'].sum().idxmax()
             insights.append(f"• Peak usage hour: {peak_hour}:00")
         
         for insight in insights:
