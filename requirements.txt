@@ -1,30 +1,20 @@
-# Core dependencies for Streamlit Cloud deployment
-streamlit==1.38.0
-pandas==2.1.4
-numpy==1.25.2
-plotly==5.17.0
-requests==2.31.0
+# Core dependencies compatible with Python 3.13
+streamlit>=1.28.0
+pandas>=2.2.0
+numpy>=1.26.0
+plotly>=5.15.0
+requests>=2.28.0
 
-# Machine Learning
-scikit-learn==1.3.2
-xgboost==2.0.3
-lightgbm==4.1.0
+# Machine Learning - compatible versions
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+lightgbm>=4.0.0
 
-# NLP and AI - simplified for deployment
-langchain==0.1.20
-langchain-community==0.0.38
-langchain-huggingface==0.0.3
-huggingface-hub==0.20.3
-transformers==4.37.2
+# NLP and AI - minimal for deployment
+langchain-community>=0.2.0
+huggingface-hub>=0.20.0
+transformers>=4.36.0
 
 # Utilities
-python-dotenv==1.0.0
-Pillow==10.0.1
-
-# Remove problematic dependencies for cloud deployment
-# seabot - not essential, causes conflicts
-# faiss-cpu - heavy dependency, optional for basic functionality
-# tiktoken - not needed for basic features
-# sentence-transformers - heavy, optional
-# unstructured - not essential
-# pytesseract - requires system dependencies
+python-dotenv>=1.0.0
+Pillow>=10.0.0

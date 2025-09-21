@@ -17,42 +17,47 @@ except ImportError:
 except Exception as e:
     print(f"Error loading .env file: {e}")
 
-# Import LangChain components with proper error handling
+# Import LangChain components with comprehensive error handling
 try:
-    # First try importing from the newer langchain_huggingface package
-    from langchain_huggingface import HuggingFaceEmbeddings
-    print("Using HuggingFaceEmbeddings from langchain_huggingface")
-    
-    # For the LLM, we'll try a different approach to avoid provider errors
-    from langchain_community.llms import HuggingFaceHub  # Use HuggingFaceHub instead of HuggingFaceEndpoint
-    print("Using HuggingFaceHub from langchain_community")
-except ImportError:
-    # Fall back to community imports if needed
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    # Try newer langchain versions first
     from langchain_community.llms import HuggingFaceHub
-    print("Using HuggingFace components from langchain_community")
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain.memory import ConversationBufferMemory
+    from langchain.schema import Document
+    from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader
+    
+    LANGCHAIN_AVAILABLE = True
+    print("LangChain components loaded successfully")
+except ImportError as e:
+    LANGCHAIN_AVAILABLE = False
+    print(f"LangChain not available: {e}")
+    print("Chatbot will use basic response mode")
 
-# Try to import FAISS, but make it optional for deployment
+# Try to import optional advanced features
+try:
+    from langchain.chains import ConversationalRetrievalChain
+    RETRIEVAL_AVAILABLE = True
+except ImportError:
+    RETRIEVAL_AVAILABLE = False
+    print("ConversationalRetrievalChain not available")
+
+# Try to import FAISS for vector storage
 try:
     from langchain_community.vectorstores import FAISS
     FAISS_AVAILABLE = True
     print("FAISS vector store available")
 except ImportError:
     FAISS_AVAILABLE = False
-    print("FAISS not available - vector search will be disabled")
+    print("FAISS not available - basic responses only")
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import ConversationalRetrievalChain
-from langchain_community.document_loaders import TextLoader, CSVLoader, DirectoryLoader
-from langchain.memory import ConversationBufferMemory
-from langchain.schema import Document
-
-# Only import PyPDFLoader if available
+# Try to import PDF loader
 try:
     from langchain_community.document_loaders import PyPDFLoader
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
+    print("PDF loading not available")
 
 class UrbanFlowLangChainBot:
     def __init__(self):  # Removed use_openai parameter
@@ -77,18 +82,29 @@ class UrbanFlowLangChainBot:
         self.is_using_fallback = False
         self.api_key_message = ""
         
-        # Update memory implementation to fix the deprecation warning
-        from langchain.schema import messages_from_dict, messages_to_dict
-        self.memory = ConversationBufferMemory(
-            return_messages=True,
-            memory_key="chat_history"
-        )
-        
-        # Setup LangChain components
-        self._setup_langchain()
+        # Initialize memory only if LangChain is available
+        if LANGCHAIN_AVAILABLE:
+            try:
+                self.memory = ConversationBufferMemory(
+                    return_messages=True,
+                    memory_key="chat_history"
+                )
+                # Setup LangChain components
+                self._setup_langchain()
+            except Exception as e:
+                print(f"Error setting up LangChain: {e}")
+                self.is_using_fallback = True
+        else:
+            self.is_using_fallback = True
+            print("LangChain not available - using basic response mode")
         
     def _setup_langchain(self):
         """Set up LangChain components based on available models"""
+        if not LANGCHAIN_AVAILABLE:
+            print("LangChain not available - skipping setup")
+            self.is_using_fallback = True
+            return
+            
         # Check for API key first
         if not self._check_api_key():
             # If no API key, we'll use fallback responses
@@ -103,8 +119,7 @@ class UrbanFlowLangChainBot:
                 model_kwargs={
                     "temperature": 0.5,
                     "max_length": 512
-                },
-                task="text2text-generation"  # Specify the task to fix validation error
+                }
             )
             
             self.embeddings = HuggingFaceEmbeddings(
@@ -168,11 +183,13 @@ class UrbanFlowLangChainBot:
                 txt_loader = DirectoryLoader(self.docs_path, glob="**/*.txt", loader_cls=TextLoader)
                 documents.extend(txt_loader.load())
                 
-                # Load PDF files
-                pdf_loader = DirectoryLoader(self.docs_path, glob="**/*.pdf", loader_cls=PyPDFLoader)
-                documents.extend(pdf_loader.load())
-                
-                print(f"Loaded documentation from {self.docs_path}")
+                # Load PDF files only if PyPDFLoader is available
+                if PDF_AVAILABLE:
+                    pdf_loader = DirectoryLoader(self.docs_path, glob="**/*.pdf", loader_cls=PyPDFLoader)
+                    documents.extend(pdf_loader.load())
+                    print(f"Loaded documentation (including PDFs) from {self.docs_path}")
+                else:
+                    print(f"Loaded text documentation from {self.docs_path} (PDF support not available)")
         except Exception as e:
             print(f"Error loading documentation: {e}")
         
