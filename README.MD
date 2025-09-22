@@ -28,43 +28,6 @@ UrbanFlow AI is an advanced data science solution that predicts bike-sharing dem
 - **Data Processing**: pandas, numpy
 - **Visualization**: matplotlib, seaborn, plotly
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.8+
-- pip or conda
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/your-username/UrbanFlowAI.git
-cd UrbanFlowAI
-```
-
-2. Create and activate virtual environment:
-```bash
-python -m venv urbanflow
-source urbanflow/bin/activate  # On Windows: urbanflow\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables (optional, for AI chatbot):
-```bash
-# Create .env file in project root
-echo "HUGGINGFACEHUB_API_TOKEN=your_hf_token_here" > .env
-```
-
-5. Run the application:
-```bash
-cd app
-streamlit run main.py
-```
 
 ## 📁 Project Structure
 
@@ -97,12 +60,6 @@ UrbanFlow AI/
 - **Temporal Patterns**: Weekday peaks during commute hours, weekend usage more distributed
 - **Seasonal Trends**: Highest usage during summer months (June-August)
 
-## 📈 Model Performance
-
-The forecasting system employs multiple models:
-- **Time Series**: ARIMA, Prophet, LSTM
-- **Machine Learning**: Gradient Boosting, Random Forest, Ensemble methods
-- **Evaluation Metrics**: RMSE, MAE, MAPE
 
 ## 🤖 AI Chatbot Features
 
@@ -120,68 +77,5 @@ The forecasting system employs multiple models:
 4. **Exploratory Insights**: EDA plots and trend analysis
 5. **AI Explainability**: SHAP/LIME model interpretations
 6. **Chatbot Assistant**: Conversational interface
-
-## 🔧 Configuration
-
-### Environment Variables
-
-- `HUGGINGFACEHUB_API_TOKEN`: Optional HuggingFace API token for enhanced chatbot
-- Without token: Basic chatbot with predefined responses
-
-### Data Setup
-
-Data files are expected in the following structure:
-```
-data/final/
-├── citibike_engineered.csv
-├── weather_engineered.csv
-├── traffic_engineered.csv
-└── merged_dataset.csv
-```
-
-## 🚀 Future Enhancements
-
-- [ ] Real-time data integration
-- [ ] Mobile app development
-- [ ] API development for third-party integration
-- [ ] Advanced visualization features
-- [ ] Personalized recommendations
-- [ ] Rebalancing optimization algorithms
-
-## 🚀 Deployment
-
-The application is optimized for **Streamlit Cloud** deployment:
-
-1. Push your code to GitHub
-2. Go to https://share.streamlit.io
-3. Connect your repository and set main file to `app/main.py`
-4. Deploy instantly!
-
-See `STREAMLIT_DEPLOYMENT.md` for detailed step-by-step instructions.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👥 Authors
-
-- **Your Name** - *Initial work* - [YourGitHub](https://github.com/yourusername)
-
-## 🙏 Acknowledgments
-
-- NYC Citi Bike for providing open data
-- OpenWeatherMap for weather data
-- NYC Department of Transportation for traffic data
-- HuggingFace for AI model infrastructure
-
----
 
 **Note**: This is a demonstration project showcasing data science and machine learning capabilities in urban mobility forecasting.
