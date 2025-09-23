@@ -163,7 +163,7 @@ def load_sample_data():
                 df = pd.read_csv(path)
                 if not df.empty:
                     if "sample" in path:
-                        st.info(f"✅ Loaded sample dataset: {len(df):,} rows from {os.path.basename(path)}")
+                        pass
                     else:
                         st.info(f"✅ Loaded full local dataset: {len(df):,} rows (limited to 10,000 for performance)")
                         df = df.head(10000)  # Limit for performance
