@@ -324,86 +324,8 @@ with tabs[0]:
         filter_percentage = (filtered_count / original_count) * 100 if original_count > 0 else 0
         
         st.info(f"📊 Filters applied: Showing {filtered_count:,} of {original_count:,} data points ({filter_percentage:.1f}%)")
-"""
+
 with tabs[1]:
-    st.header("Station Usage Map")
-    
-    # Always show all stations regardless of filters
-    all_stations = ['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street']
-    
-    # Calculate trip counts for each station from RAW data (not filtered data)
-    if 'start_station_id' in raw_data.columns and not raw_data.empty:
-        station_trips = raw_data.groupby('start_station_id')['demand_count'].sum().reset_index()
-        # Ensure all stations are represented
-        station_trips_dict = dict(zip(station_trips['start_station_id'], station_trips['demand_count']))
-    else:
-        # Fallback data if raw data unavailable
-        station_trips_dict = {
-            'Central Park South': 2500,
-            'Times Square': 1800, 
-            'Brooklyn Bridge': 2200,
-            'Wall Street': 1500
-        }
-
-    
-    # NYC coordinates for stations
-    coordinates = {
-        'Central Park South': {'lat': 40.7677, 'lon': -73.9796},
-        'Times Square': {'lat': 40.7580, 'lon': -73.9855},
-        'Brooklyn Bridge': {'lat': 40.7061, 'lon': -73.9969},
-        'Wall Street': {'lat': 40.7074, 'lon': -74.0113}
-    }
-    
-
-    # Create enhanced station data for ALL stations
-    nyc_stations = []
-    for station_name in all_stations:
-        demand = station_trips_dict.get(station_name, 0)
-        nyc_stations.append({
-            'station_id': station_name,
-            'station_name': station_name,
-            'latitude': coordinates[station_name]['lat'],
-            'longitude': coordinates[station_name]['lon'],
-            'demand_count': demand
-        })
-    
-    nyc_stations = pd.DataFrame(nyc_stations)
-    
-    if not nyc_stations.empty:
-        # Create map visualization - always show all stations
-        st.subheader(f"All NYC Bike Stations (Total: {len(nyc_stations)} stations)")
-        st.info("📍 This map shows all stations with total historical demand, independent of current filters.")
-        
-        fig = px.scatter_map(nyc_stations, 
-                            lat="latitude", 
-                            lon="longitude", 
-                            size="demand_count",
-                            color="demand_count",
-                            hover_name="station_name",
-                            hover_data=["station_id", "demand_count"],
-                            color_continuous_scale="Viridis",
-                            size_max=20,
-                            zoom=11,
-                            height=500,
-                            title=f"Station Usage Overview (Total trips: {nyc_stations['demand_count'].sum():,})")
-        
-        # Ensure the map displays properly
-        fig.update_geos(projection_type="mercator")
-        fig.update_layout(
-            margin={"r":0,"t":30,"l":0,"b":0},
-            showlegend=True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Station statistics
-        st.subheader("Complete Station Usage Statistics")
-        station_stats = nyc_stations[['station_name', 'demand_count']].sort_values('demand_count', ascending=False)
-        station_stats['percentage'] = (station_stats['demand_count'] / station_stats['demand_count'].sum() * 100).round(1)
-        st.dataframe(station_stats, use_container_width=True)
-    else:
-        st.warning("⚠️ No stations data available.")
-"""
-with tabs[2]:
     st.header("Forecasting Panel")
     
     # Forecasting section
@@ -496,7 +418,7 @@ with tabs[2]:
     st.plotly_chart(fig, use_container_width=True)
     
 
-with tabs[3]:
+with tabs[2]:
     st.header("Exploratory Insights")
     
     if sample_data.empty:
@@ -572,7 +494,7 @@ with tabs[3]:
         for insight in insights:
             st.write(insight)
 
-with tabs[4]:
+with tabs[3]:
     st.header("AI & Explainability")
     
     st.subheader("Model Feature Importance")
@@ -629,7 +551,7 @@ with tabs[4]:
     st.info("💡 This prediction suggests high bike demand due to optimal weather and commute timing.")
 
 # New tab for the chatbot
-with tabs[5]:
+with tabs[4]:
     st.header("UrbanFlow Assistant")
     
    
