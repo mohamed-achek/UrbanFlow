@@ -116,6 +116,7 @@ class UrbanFlowLangChainBot:
             self.llm = HuggingFaceHub(
                 repo_id="google/flan-t5-base",  # Using a smaller model that's more likely to work
                 huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"],
+                task="text2text-generation",  # Required parameter for flan-t5 models
                 model_kwargs={
                     "temperature": 0.5,
                     "max_length": 512
@@ -137,17 +138,37 @@ class UrbanFlowLangChainBot:
     
     def _check_api_key(self):
         """Check if the HuggingFace API key is available"""
+        # First try to get from Streamlit secrets (for deployment)
+        try:
+            import streamlit as st
+            if hasattr(st, 'secrets'):
+                # Try different possible locations in secrets
+                api_token = None
+                if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
+                    api_token = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+                elif "huggingface" in st.secrets and "api_token" in st.secrets["huggingface"]:
+                    api_token = st.secrets["huggingface"]["api_token"]
+                
+                if api_token and api_token.strip():
+                    # Set it in environment for compatibility with HuggingFaceHub
+                    os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_token
+                    print("Using HuggingFace API key from Streamlit secrets")
+                    return True
+        except Exception as e:
+            print(f"Could not access Streamlit secrets: {e}")
+        
+        # Then try environment variables
         if "HUGGINGFACEHUB_API_TOKEN" not in os.environ:
             self.api_key_message = (
                 "No HuggingFace API key found. Please set the HUGGINGFACEHUB_API_TOKEN "
-                "environment variable. Using basic responses without AI capabilities."
+                "environment variable or add it to Streamlit secrets. Using basic responses without AI capabilities."
             )
             print(self.api_key_message)
             return False
         elif not os.environ["HUGGINGFACEHUB_API_TOKEN"].strip():
             self.api_key_message = (
                 "HuggingFace API key is empty. Please set a valid API key in the "
-                "HUGGINGFACEHUB_API_TOKEN environment variable."
+                "HUGGINGFACEHUB_API_TOKEN environment variable or Streamlit secrets."
             )
             print(self.api_key_message)
             return False

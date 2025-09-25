@@ -117,11 +117,11 @@ model_selector = st.sidebar.selectbox("Model Selector", options=["Random Forest"
 
 # Apply filters button
 if st.sidebar.button("Apply Filters") or True:  # Auto-apply filters on any change
-    st.sidebar.success("✅ Filters applied successfully!")
+    pass
 
 # Download button
-if st.sidebar.button("Download Filtered Data"):
-    st.sidebar.success("Data download feature coming soon!")
+#if st.sidebar.button("Download Filtered Data"):
+#    st.sidebar.success("Data download feature coming soon!")
 
 # Show current filter summary in sidebar
 st.sidebar.markdown("---")
@@ -238,7 +238,6 @@ raw_data = load_sample_data()
 sample_data = filter_data(raw_data, selected_stations, temp_range, precip_range, wind_range, date_range)
 tabs = st.tabs([
     "Dashboard Overview",
-    "Station Usage Map",
     "Forecasting Panel",
     "Exploratory Insights",
     "AI & Explainability",
@@ -325,27 +324,27 @@ with tabs[0]:
         filter_percentage = (filtered_count / original_count) * 100 if original_count > 0 else 0
         
         st.info(f"📊 Filters applied: Showing {filtered_count:,} of {original_count:,} data points ({filter_percentage:.1f}%)")
-
+"""
 with tabs[1]:
     st.header("Station Usage Map")
     
-    # Create dynamic station data based on filters
+    # Always show all stations regardless of filters
     all_stations = ['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street']
-    if "All" not in selected_stations and len(selected_stations) > 0:
-        stations_to_show = selected_stations
-    else:
-        stations_to_show = all_stations
     
-    # Calculate trip counts for each station from filtered data
-    if 'start_station_id' in sample_data.columns and not sample_data.empty:
-        station_trips = sample_data.groupby('start_station_id')['demand_count'].sum().reset_index() if 'start_station_id' in sample_data.columns else pd.DataFrame()
-        station_trips = station_trips[station_trips['start_station_id'].isin(stations_to_show)]
+    # Calculate trip counts for each station from RAW data (not filtered data)
+    if 'start_station_id' in raw_data.columns and not raw_data.empty:
+        station_trips = raw_data.groupby('start_station_id')['demand_count'].sum().reset_index()
+        # Ensure all stations are represented
+        station_trips_dict = dict(zip(station_trips['start_station_id'], station_trips['demand_count']))
     else:
-        # Fallback data
-        station_trips = pd.DataFrame({
-            'start_station_id': stations_to_show,
-            'demand_count': [250, 180, 220, 150][:len(stations_to_show)]
-        })
+        # Fallback data if raw data unavailable
+        station_trips_dict = {
+            'Central Park South': 2500,
+            'Times Square': 1800, 
+            'Brooklyn Bridge': 2200,
+            'Wall Street': 1500
+        }
+
     
     # NYC coordinates for stations
     coordinates = {
@@ -355,24 +354,26 @@ with tabs[1]:
         'Wall Street': {'lat': 40.7074, 'lon': -74.0113}
     }
     
-    # Create enhanced station data
+
+    # Create enhanced station data for ALL stations
     nyc_stations = []
-    for _, row in station_trips.iterrows():
-        station_id = row['start_station_id']
-        if station_id in coordinates:
-            nyc_stations.append({
-                'station_id': station_id,
-                'station_name': station_id,
-                'latitude': coordinates[station_id]['lat'],
-                'longitude': coordinates[station_id]['lon'],
-                'demand_count': row['demand_count']
-            })
+    for station_name in all_stations:
+        demand = station_trips_dict.get(station_name, 0)
+        nyc_stations.append({
+            'station_id': station_name,
+            'station_name': station_name,
+            'latitude': coordinates[station_name]['lat'],
+            'longitude': coordinates[station_name]['lon'],
+            'demand_count': demand
+        })
     
     nyc_stations = pd.DataFrame(nyc_stations)
     
     if not nyc_stations.empty:
-        # Create map visualization
-        st.subheader(f"Popular Bike Stations in NYC (Filtered: {len(nyc_stations)} stations)")
+        # Create map visualization - always show all stations
+        st.subheader(f"All NYC Bike Stations (Total: {len(nyc_stations)} stations)")
+        st.info("📍 This map shows all stations with total historical demand, independent of current filters.")
+        
         fig = px.scatter_map(nyc_stations, 
                             lat="latitude", 
                             lon="longitude", 
@@ -384,50 +385,69 @@ with tabs[1]:
                             size_max=20,
                             zoom=11,
                             height=500,
-                            title=f"Station Usage (Total trips: {nyc_stations['demand_count'].sum():,})")
+                            title=f"Station Usage Overview (Total trips: {nyc_stations['demand_count'].sum():,})")
         
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        # Ensure the map displays properly
+        fig.update_geos(projection_type="mercator")
+        fig.update_layout(
+            margin={"r":0,"t":30,"l":0,"b":0},
+            showlegend=True
+        )
         st.plotly_chart(fig, use_container_width=True)
         
         # Station statistics
-        st.subheader("Station Usage Statistics")
+        st.subheader("Complete Station Usage Statistics")
         station_stats = nyc_stations[['station_name', 'demand_count']].sort_values('demand_count', ascending=False)
         station_stats['percentage'] = (station_stats['demand_count'] / station_stats['demand_count'].sum() * 100).round(1)
         st.dataframe(station_stats, use_container_width=True)
     else:
-        st.warning("⚠️ No stations match the current filter criteria.")
-
+        st.warning("⚠️ No stations data available.")
+"""
 with tabs[2]:
     st.header("Forecasting Panel")
     
     # Forecasting section
     st.subheader("24-Hour Demand Forecast")
     
-    # Generate sample forecast data
+    # Generate sample forecast data based on selected model
     @st.cache_data
-    def generate_forecast():
+    def generate_forecast(model_name):
         current_time = datetime.now()
         future_hours = [current_time + timedelta(hours=i) for i in range(24)]
         
-        # Simple forecast simulation
+        # Different forecast patterns based on selected model
         base_demand = 50
         forecasted_trips = []
         actual_trips = []
+        
+        # Model-specific parameters for demonstration
+        if model_name == "Random Forest":
+            model_variance = 5
+            model_bias = 0
+            model_desc = "Stable predictions with moderate variance"
+        elif model_name == "XGBoost":
+            model_variance = 3
+            model_bias = 2
+            model_desc = "More precise predictions with slight optimistic bias"
+        else:  # Neural Network
+            model_variance = 7
+            model_bias = -1
+            model_desc = "Higher variance predictions with slight conservative bias"
         
         for i, hour in enumerate(future_hours):
             # Simulate daily pattern with some randomness
             hour_of_day = hour.hour
             if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
                 # Peak hours
-                forecast = base_demand + np.random.normal(30, 5)
+                forecast = base_demand + np.random.normal(30 + model_bias, model_variance)
                 actual = forecast + np.random.normal(0, 10)
             elif 22 <= hour_of_day or hour_of_day <= 6:
                 # Low activity hours
-                forecast = base_demand + np.random.normal(-20, 5)
+                forecast = base_demand + np.random.normal(-20 + model_bias, model_variance)
                 actual = forecast + np.random.normal(0, 8)
             else:
                 # Regular hours
-                forecast = base_demand + np.random.normal(10, 5)
+                forecast = base_demand + np.random.normal(10 + model_bias, model_variance)
                 actual = forecast + np.random.normal(0, 12)
             
             forecasted_trips.append(max(0, forecast))
@@ -439,7 +459,10 @@ with tabs[2]:
             'actual': actual_trips
         })
     
-    forecast_data = generate_forecast()
+    # Display selected model info
+    st.info(f"📊 **Current Model**: {model_selector} - Generating predictions with model-specific patterns")
+    
+    forecast_data = generate_forecast(model_selector)
     
     # Plotting forecast vs actual
     fig = go.Figure()
@@ -472,16 +495,6 @@ with tabs[2]:
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Model performance metrics
-    st.subheader("Model Performance")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("RMSE", "12.5", "-2.1")
-    with col2:
-        st.metric("MAE", "9.8", "-1.5")
-    with col3:
-        st.metric("R²", "0.85", "+0.03")
 
 with tabs[3]:
     st.header("Exploratory Insights")
@@ -619,16 +632,7 @@ with tabs[4]:
 with tabs[5]:
     st.header("UrbanFlow Assistant")
     
-    # Show API status
-    from chatbot import get_api_status
-    status_message = get_api_status()
-    if "fallback" in status_message.lower():
-        st.warning(status_message)
-    elif "connected" in status_message.lower():
-        st.success(status_message)
-    else:
-        st.info(status_message)
-    
+   
     st.markdown("Ask me questions about bike usage, weather impact, traffic patterns, or popular stations!")
     
     # Initialize chat history in session state if it doesn't exist
