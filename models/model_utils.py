@@ -15,13 +15,21 @@ warnings.filterwarnings('ignore')
 
 # Machine Learning imports
 from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-import xgboost as xgb
-import lightgbm as lgb
+from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
+
+# Deep Learning imports for LSTM
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import LSTM, Dense, Dropout
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.callbacks import EarlyStopping
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
+    print("TensorFlow not available. LSTM model will not be available.")
 
 # Create models directory if it doesn't exist
 MODELS_DIR = os.path.join(os.path.dirname(__file__), 'trained_models')
@@ -105,15 +113,13 @@ def get_models_dict() -> Dict[str, Any]:
         Dict[str, Any]: Dictionary of model names and instances
     """
     models = {
-        'linear_regression': LinearRegression(),
-        'ridge': Ridge(alpha=1.0),
-        'lasso': Lasso(alpha=1.0),
-        'decision_tree': DecisionTreeRegressor(random_state=42),
-        'random_forest': RandomForestRegressor(n_estimators=100, random_state=42),
-        'gradient_boosting': GradientBoostingRegressor(n_estimators=100, random_state=42),
-        'xgboost': xgb.XGBRegressor(n_estimators=100, random_state=42),
-        'lightgbm': lgb.LGBMRegressor(n_estimators=100, random_state=42, verbose=-1)
+        'random_forest': RandomForestRegressor(n_estimators=100, random_state=42)
     }
+    
+    # Add LSTM model if TensorFlow is available
+    if TENSORFLOW_AVAILABLE:
+        models['lstm'] = 'lstm_model'  # Special key for LSTM
+    
     return models
 
 def evaluate_model(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
@@ -144,6 +150,156 @@ def evaluate_model(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
         metrics['mape'] = np.inf
     
     return metrics
+
+def create_lstm_model(input_shape: Tuple[int, int], 
+                     lstm_units: int = 50, 
+                     dropout_rate: float = 0.2,
+                     learning_rate: float = 0.001) -> Any:
+    """
+    Create LSTM model for time series forecasting
+    
+    Args:
+        input_shape (Tuple[int, int]): Shape of input data (timesteps, features)
+        lstm_units (int): Number of LSTM units
+        dropout_rate (float): Dropout rate for regularization
+        learning_rate (float): Learning rate for optimizer
+        
+    Returns:
+        Compiled LSTM model
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required for LSTM model")
+    
+    model = Sequential([
+        LSTM(lstm_units, return_sequences=True, input_shape=input_shape),
+        Dropout(dropout_rate),
+        LSTM(lstm_units // 2, return_sequences=False),
+        Dropout(dropout_rate),
+        Dense(25, activation='relu'),
+        Dense(1, activation='linear')
+    ])
+    
+    model.compile(
+        optimizer=Adam(learning_rate=learning_rate),
+        loss='mse',
+        metrics=['mae']
+    )
+    
+    return model
+
+def prepare_lstm_data(X: pd.DataFrame, y: pd.Series, 
+                     sequence_length: int = 10,
+                     test_size: float = 0.2) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Any, Any]:
+    """
+    Prepare data for LSTM training with time sequences
+    
+    Args:
+        X (pd.DataFrame): Features
+        y (pd.Series): Target
+        sequence_length (int): Length of input sequences
+        test_size (float): Test set size
+        
+    Returns:
+        Tuple of train/test data and scalers
+    """
+    # Scale the data
+    feature_scaler = MinMaxScaler()
+    target_scaler = MinMaxScaler()
+    
+    X_scaled = feature_scaler.fit_transform(X)
+    y_scaled = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
+    
+    # Create sequences
+    X_sequences, y_sequences = [], []
+    
+    for i in range(sequence_length, len(X_scaled)):
+        X_sequences.append(X_scaled[i-sequence_length:i])
+        y_sequences.append(y_scaled[i])
+    
+    X_sequences = np.array(X_sequences)
+    y_sequences = np.array(y_sequences)
+    
+    # Split data
+    split_idx = int(len(X_sequences) * (1 - test_size))
+    
+    X_train = X_sequences[:split_idx]
+    X_test = X_sequences[split_idx:]
+    y_train = y_sequences[:split_idx]
+    y_test = y_sequences[split_idx:]
+    
+    return X_train, X_test, y_train, y_test, feature_scaler, target_scaler
+
+def train_lstm_model(X: pd.DataFrame, y: pd.Series, 
+                    sequence_length: int = 10,
+                    lstm_units: int = 50,
+                    epochs: int = 100,
+                    batch_size: int = 32,
+                    validation_split: float = 0.2) -> Dict[str, Any]:
+    """
+    Train LSTM model for time series prediction
+    
+    Args:
+        X (pd.DataFrame): Features
+        y (pd.Series): Target
+        sequence_length (int): Length of input sequences
+        lstm_units (int): Number of LSTM units
+        epochs (int): Number of training epochs
+        batch_size (int): Batch size for training
+        validation_split (float): Validation split ratio
+        
+    Returns:
+        Dict containing trained model and results
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required for LSTM model")
+    
+    # Prepare data
+    X_train, X_test, y_train, y_test, feature_scaler, target_scaler = prepare_lstm_data(
+        X, y, sequence_length
+    )
+    
+    # Create model
+    input_shape = (X_train.shape[1], X_train.shape[2])
+    model = create_lstm_model(input_shape, lstm_units)
+    
+    # Early stopping callback
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    )
+    
+    # Train model
+    print("Training LSTM model...")
+    history = model.fit(
+        X_train, y_train,
+        epochs=epochs,
+        batch_size=batch_size,
+        validation_split=validation_split,
+        callbacks=[early_stopping],
+        verbose=1
+    )
+    
+    # Make predictions
+    y_pred = model.predict(X_test)
+    
+    # Inverse transform predictions
+    y_test_original = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+    y_pred_original = target_scaler.inverse_transform(y_pred).flatten()
+    
+    # Evaluate model
+    metrics = evaluate_model(y_test_original, y_pred_original)
+    
+    return {
+        'model': model,
+        'metrics': metrics,
+        'history': history.history,
+        'feature_scaler': feature_scaler,
+        'target_scaler': target_scaler,
+        'sequence_length': sequence_length,
+        'y_test': y_test_original,
+        'y_pred': y_pred_original
+    }
 
 def train_and_evaluate_models(X: pd.DataFrame, y: pd.Series, test_size: float = 0.2) -> Dict[str, Dict]:
     """
@@ -177,32 +333,45 @@ def train_and_evaluate_models(X: pd.DataFrame, y: pd.Series, test_size: float = 
         try:
             print(f"Training {name}...")
             
-            # Train model
-            if name in ['linear_regression', 'ridge', 'lasso']:
-                # Linear models work better with scaled features
-                model.fit(X_train_scaled, y_train)
-                y_pred = model.predict(X_test_scaled)
-            else:
-                # Tree-based models
+            if name == 'lstm':
+                # Special handling for LSTM model
+                if TENSORFLOW_AVAILABLE:
+                    lstm_results = train_lstm_model(X, y)
+                    results[name] = {
+                        'model': lstm_results['model'],
+                        'scaler': lstm_results['feature_scaler'],
+                        'target_scaler': lstm_results['target_scaler'],
+                        'metrics': lstm_results['metrics'],
+                        'sequence_length': lstm_results['sequence_length'],
+                        'predictions': lstm_results['y_pred'],
+                        'cv_rmse': lstm_results['metrics']['rmse']  # Use test RMSE as CV score
+                    }
+                    print(f"{name} - RMSE: {lstm_results['metrics']['rmse']:.4f}, R²: {lstm_results['metrics']['r2']:.4f}")
+                else:
+                    print(f"Skipping {name} - TensorFlow not available")
+                continue
+            
+            # Train Random Forest model
+            if name == 'random_forest':
                 model.fit(X_train, y_train)
                 y_pred = model.predict(X_test)
-            
-            # Evaluate
-            metrics = evaluate_model(y_test, y_pred)
-            
-            # Cross-validation score
-            cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
-            cv_rmse = np.sqrt(-cv_scores.mean())
-            
-            results[name] = {
-                'model': model,
-                'scaler': scaler if name in ['linear_regression', 'ridge', 'lasso'] else None,
-                'metrics': metrics,
-                'cv_rmse': cv_rmse,
-                'predictions': y_pred
-            }
-            
-            print(f"{name} - RMSE: {metrics['rmse']:.4f}, R²: {metrics['r2']:.4f}")
+                
+                # Evaluate
+                metrics = evaluate_model(y_test, y_pred)
+                
+                # Cross-validation score
+                cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
+                cv_rmse = np.sqrt(-cv_scores.mean())
+                
+                results[name] = {
+                    'model': model,
+                    'scaler': None,
+                    'metrics': metrics,
+                    'cv_rmse': cv_rmse,
+                    'predictions': y_pred
+                }
+                
+                print(f"{name} - RMSE: {metrics['rmse']:.4f}, R²: {metrics['r2']:.4f}")
             
         except Exception as e:
             print(f"Error training {name}: {e}")
@@ -278,6 +447,92 @@ def get_latest_model(model_name: str) -> Tuple[Any, Optional[Any], str]:
     
     model, scaler = load_model(latest_model_path)
     return model, scaler, latest_model_path
+
+def load_lstm_model(model_path: str) -> Tuple[Any, Optional[Any], Optional[Any], int]:
+    """
+    Load LSTM model from .h5 file along with scalers and metadata
+    
+    Args:
+        model_path (str): Path to the .h5 model file
+        
+    Returns:
+        Tuple[Any, Optional[Any], Optional[Any], int]: Model, feature_scaler, target_scaler, sequence_length
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required to load LSTM models")
+    
+    try:
+        # Load the Keras model
+        model = tf.keras.models.load_model(model_path)
+        
+        # Try to load accompanying scalers and metadata
+        base_path = model_path.replace('.h5', '')
+        scaler_path = f"{base_path}_scalers.pkl"
+        
+        feature_scaler = None
+        target_scaler = None
+        sequence_length = 10  # Default value
+        
+        if os.path.exists(scaler_path):
+            scaler_data = joblib.load(scaler_path)
+            feature_scaler = scaler_data.get('feature_scaler')
+            target_scaler = scaler_data.get('target_scaler')
+            sequence_length = scaler_data.get('sequence_length', 10)
+        
+        print(f"Successfully loaded LSTM model from {model_path}")
+        return model, feature_scaler, target_scaler, sequence_length
+        
+    except Exception as e:
+        print(f"Error loading LSTM model: {e}")
+        return None, None, None, 10
+
+def save_lstm_model(model: Any, model_name: str, feature_scaler: Any, target_scaler: Any, 
+                   sequence_length: int, metrics: Dict[str, float]) -> str:
+    """
+    Save LSTM model to .h5 file along with scalers and metadata
+    
+    Args:
+        model: Trained LSTM model
+        model_name (str): Name for the model file
+        feature_scaler: Feature scaler
+        target_scaler: Target scaler
+        sequence_length (int): Sequence length used for training
+        metrics (Dict[str, float]): Model performance metrics
+        
+    Returns:
+        str: Path to saved model
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required to save LSTM models")
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_path = os.path.join(MODELS_DIR, f"{model_name}_{timestamp}.h5")
+    scaler_path = os.path.join(MODELS_DIR, f"{model_name}_{timestamp}_scalers.pkl")
+    
+    try:
+        # Save the Keras model
+        model.save(model_path)
+        
+        # Save scalers and metadata
+        scaler_data = {
+            'feature_scaler': feature_scaler,
+            'target_scaler': target_scaler,
+            'sequence_length': sequence_length,
+            'metrics': metrics,
+            'timestamp': timestamp,
+            'model_name': model_name
+        }
+        
+        joblib.dump(scaler_data, scaler_path)
+        
+        print(f"LSTM model saved to {model_path}")
+        print(f"Scalers saved to {scaler_path}")
+        
+        return model_path
+        
+    except Exception as e:
+        print(f"Error saving LSTM model: {e}")
+        return ""
 
 def predict_demand(model: Any, X: pd.DataFrame, scaler: Optional[Any] = None) -> np.ndarray:
     """
@@ -440,38 +695,61 @@ class StreamlitModelPredictor:
     def __init__(self):
         self.model = None
         self.scaler = None
+        self.target_scaler = None
         self.feature_names = None
         self.model_metadata = None
+        self.sequence_length = 10
+        self.model_type = None
         self.is_loaded = False
     
     @st.cache_data
     def load_trained_model(_self, model_name: str = "random_forest") -> bool:
         """Load the trained model for Streamlit app"""
         try:
-            model_path = os.path.join(MODELS_DIR, f"{model_name}.pkl")
+            # Check for both .pkl (Random Forest) and .h5 (LSTM) files
+            pkl_path = os.path.join(MODELS_DIR, f"{model_name}.pkl")
+            h5_path = os.path.join(MODELS_DIR, f"{model_name}.h5")
             
-            if not os.path.exists(model_path):
-                st.error(f"❌ Model file not found: {model_path}")
-                return False
-            
-            # Load model data
-            with open(model_path, 'rb') as f:
-                model_data = pickle.load(f)
-            
-            # Handle different pickle formats
-            if isinstance(model_data, dict):
-                _self.model = model_data.get('model')
-                _self.scaler = model_data.get('scaler')
-                _self.feature_names = model_data.get('feature_names', [])
-                _self.model_metadata = model_data.get('metadata', {})
-            else:
-                # Model was saved directly
-                _self.model = model_data
+            if os.path.exists(pkl_path):
+                # Load Random Forest model
+                with open(pkl_path, 'rb') as f:
+                    model_data = pickle.load(f)
+                
+                # Handle different pickle formats
+                if isinstance(model_data, dict):
+                    _self.model = model_data.get('model')
+                    _self.scaler = model_data.get('scaler')
+                    _self.feature_names = model_data.get('feature_names', [])
+                    _self.model_metadata = model_data.get('metadata', {})
+                else:
+                    # Model was saved directly
+                    _self.model = model_data
+                    _self.feature_names = [
+                        'temperature_2m', 'precipitation', 'wind_speed_10m', 
+                        'hour', 'is_weekend', 'is_peak_hour'
+                    ]
+                    _self.model_metadata = {}
+                
+                _self.model_type = "random_forest"
+                
+            elif os.path.exists(h5_path) and TENSORFLOW_AVAILABLE:
+                # Load LSTM model
+                _self.model, _self.scaler, _self.target_scaler, _self.sequence_length = load_lstm_model(h5_path)
+                
+                if _self.model is None:
+                    st.error(f"❌ Failed to load LSTM model from {h5_path}")
+                    return False
+                
                 _self.feature_names = [
                     'temperature_2m', 'precipitation', 'wind_speed_10m', 
                     'hour', 'is_weekend', 'is_peak_hour'
                 ]
                 _self.model_metadata = {}
+                _self.model_type = "lstm"
+                
+            else:
+                st.error(f"❌ Model file not found: {pkl_path} or {h5_path}")
+                return False
             
             _self.is_loaded = True
             
@@ -499,26 +777,60 @@ class StreamlitModelPredictor:
             raise ValueError("Model not loaded")
         
         try:
-            # Prepare features
-            features = self._prepare_streamlit_features(input_data)
+            if self.model_type == "random_forest":
+                # Random Forest prediction
+                features = self._prepare_streamlit_features(input_data)
+                
+                # Apply scaling if scaler exists
+                if self.scaler:
+                    features_scaled = self.scaler.transform([features])
+                    prediction = self.model.predict(features_scaled)[0]
+                else:
+                    prediction = self.model.predict([features])[0]
+                
+                # Ensure positive predictions
+                prediction = max(0, prediction)
+                
+                # Get additional details
+                details = {
+                    'prediction': float(prediction),
+                    'input_features': dict(zip(self.feature_names, features)),
+                    'feature_importance': self._get_feature_importance_dict(),
+                    'model_confidence': self._estimate_confidence(features),
+                    'model_type': 'random_forest'
+                }
+                
+            elif self.model_type == "lstm":
+                # LSTM prediction (simplified for single prediction)
+                features = self._prepare_streamlit_features(input_data)
+                
+                # For LSTM, we need sequence data. For single prediction, we'll replicate the features
+                # This is a simplified approach - in practice, you'd use historical data
+                features_sequence = np.array([features] * self.sequence_length).reshape(1, self.sequence_length, -1)
+                
+                if self.scaler:
+                    features_sequence = self.scaler.transform(features_sequence.reshape(-1, features_sequence.shape[-1])).reshape(1, self.sequence_length, -1)
+                
+                prediction = self.model.predict(features_sequence)[0][0]
+                
+                # Inverse transform if target scaler exists
+                if self.target_scaler:
+                    prediction = self.target_scaler.inverse_transform([[prediction]])[0][0]
+                
+                # Ensure positive prediction
+                prediction = max(0, prediction)
+                
+                # Get additional details
+                details = {
+                    'prediction': float(prediction),
+                    'input_features': dict(zip(self.feature_names, features)),
+                    'model_confidence': 0.8,  # Default confidence for LSTM
+                    'model_type': 'lstm',
+                    'sequence_length': self.sequence_length
+                }
             
-            # Apply scaling if scaler exists
-            if self.scaler:
-                features_scaled = self.scaler.transform([features])
-                prediction = self.model.predict(features_scaled)[0]
             else:
-                prediction = self.model.predict([features])[0]
-            
-            # Ensure positive prediction
-            prediction = max(0, prediction)
-            
-            # Get additional details
-            details = {
-                'prediction': float(prediction),
-                'input_features': dict(zip(self.feature_names, features)),
-                'feature_importance': self._get_feature_importance_dict(),
-                'model_confidence': self._estimate_confidence(features)
-            }
+                raise ValueError(f"Unknown model type: {self.model_type}")
             
             return prediction, details
             
@@ -559,11 +871,15 @@ class StreamlitModelPredictor:
     
     def _get_feature_importance_dict(self) -> Dict[str, float]:
         """Get feature importance as dictionary"""
-        if not hasattr(self.model, 'feature_importances_'):
+        if self.model_type == "random_forest" and hasattr(self.model, 'feature_importances_'):
+            importances = self.model.feature_importances_
+            return dict(zip(self.feature_names, importances))
+        elif self.model_type == "lstm":
+            # LSTM doesn't have traditional feature importance, return equal weights as placeholder
+            equal_weight = 1.0 / len(self.feature_names)
+            return dict(zip(self.feature_names, [equal_weight] * len(self.feature_names)))
+        else:
             return {}
-        
-        importances = self.model.feature_importances_
-        return dict(zip(self.feature_names, importances))
     
     def _estimate_confidence(self, features: list) -> float:
         """Estimate prediction confidence"""

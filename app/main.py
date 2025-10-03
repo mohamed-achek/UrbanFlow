@@ -125,7 +125,7 @@ wind_range = st.sidebar.slider("Wind Speed (km/h)", min_value=0, max_value=50, v
 
 # Additional options
 include_traffic = st.sidebar.checkbox("Include Traffic Data", value=False)
-model_selector = st.sidebar.selectbox("Model Selector", options=["Random Forest", "XGBoost", "Neural Network"], index=0)
+model_selector = st.sidebar.selectbox("Model Selector", options=["Random Forest", "LSTM"], index=0)
 
 # Apply filters button
 if st.sidebar.button("Apply Filters") or True:  # Auto-apply filters on any change
