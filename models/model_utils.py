@@ -431,6 +431,178 @@ def run_model_pipeline(data_path: str, target_col: str = 'trip_count') -> Dict[s
         'feature_names': list(X.columns)
     }
 
+# Streamlit Integration Functions
+import streamlit as st
+
+class StreamlitModelPredictor:
+    """Handle model loading and predictions for Streamlit app"""
+    
+    def __init__(self):
+        self.model = None
+        self.scaler = None
+        self.feature_names = None
+        self.model_metadata = None
+        self.is_loaded = False
+    
+    @st.cache_data
+    def load_trained_model(_self, model_name: str = "random_forest") -> bool:
+        """Load the trained model for Streamlit app"""
+        try:
+            model_path = os.path.join(MODELS_DIR, f"{model_name}.pkl")
+            
+            if not os.path.exists(model_path):
+                st.error(f"❌ Model file not found: {model_path}")
+                return False
+            
+            # Load model data
+            with open(model_path, 'rb') as f:
+                model_data = pickle.load(f)
+            
+            # Handle different pickle formats
+            if isinstance(model_data, dict):
+                _self.model = model_data.get('model')
+                _self.scaler = model_data.get('scaler')
+                _self.feature_names = model_data.get('feature_names', [])
+                _self.model_metadata = model_data.get('metadata', {})
+            else:
+                # Model was saved directly
+                _self.model = model_data
+                _self.feature_names = [
+                    'temperature_2m', 'precipitation', 'wind_speed_10m', 
+                    'hour', 'is_weekend', 'is_peak_hour'
+                ]
+                _self.model_metadata = {}
+            
+            _self.is_loaded = True
+            
+            # Show success message
+            st.success(f"🤖 {model_name} model loaded successfully!")
+            
+            if _self.model_metadata:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("R² Score", f"{_self.model_metadata.get('r2_score', 'N/A'):.3f}")
+                with col2:
+                    st.metric("RMSE", f"{_self.model_metadata.get('rmse', 'N/A'):.2f}")
+                with col3:
+                    st.metric("MAE", f"{_self.model_metadata.get('mae', 'N/A'):.2f}")
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error loading model: {str(e)}")
+            return False
+    
+    def make_streamlit_prediction(self, input_data: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
+        """Make prediction for Streamlit app"""
+        if not self.is_loaded:
+            raise ValueError("Model not loaded")
+        
+        try:
+            # Prepare features
+            features = self._prepare_streamlit_features(input_data)
+            
+            # Apply scaling if scaler exists
+            if self.scaler:
+                features_scaled = self.scaler.transform([features])
+                prediction = self.model.predict(features_scaled)[0]
+            else:
+                prediction = self.model.predict([features])[0]
+            
+            # Ensure positive prediction
+            prediction = max(0, prediction)
+            
+            # Get additional details
+            details = {
+                'prediction': float(prediction),
+                'input_features': dict(zip(self.feature_names, features)),
+                'feature_importance': self._get_feature_importance_dict(),
+                'model_confidence': self._estimate_confidence(features)
+            }
+            
+            return prediction, details
+            
+        except Exception as e:
+            raise ValueError(f"Prediction failed: {str(e)}")
+    
+    def _prepare_streamlit_features(self, input_data: Dict[str, Any]) -> list:
+        """Prepare features for prediction"""
+        # Map Streamlit inputs to model features
+        feature_mapping = {
+            'temperature_2m': input_data.get('temperature', 20.0),
+            'precipitation': input_data.get('precipitation', 0.0),
+            'wind_speed_10m': input_data.get('wind_speed', 5.0),
+            'hour': input_data.get('hour', 12),
+            'is_weekend': int(input_data.get('is_weekend', False)),
+            'is_peak_hour': int(input_data.get('is_peak_hour', False))
+        }
+        
+        # Create feature vector
+        features = []
+        for name in self.feature_names:
+            if name in feature_mapping:
+                features.append(feature_mapping[name])
+            else:
+                # Default values for missing features
+                if 'temperature' in name:
+                    features.append(20.0)
+                elif 'precipitation' in name:
+                    features.append(0.0)
+                elif 'wind' in name:
+                    features.append(5.0)
+                elif 'hour' in name:
+                    features.append(12)
+                else:
+                    features.append(0)
+        
+        return features
+    
+    def _get_feature_importance_dict(self) -> Dict[str, float]:
+        """Get feature importance as dictionary"""
+        if not hasattr(self.model, 'feature_importances_'):
+            return {}
+        
+        importances = self.model.feature_importances_
+        return dict(zip(self.feature_names, importances))
+    
+    def _estimate_confidence(self, features: list) -> float:
+        """Estimate prediction confidence"""
+        try:
+            if hasattr(self.model, 'estimators_'):
+                # For ensemble models, use prediction variance
+                predictions = [tree.predict([features])[0] for tree in self.model.estimators_[:10]]
+                std_dev = np.std(predictions)
+                mean_pred = np.mean(predictions)
+                confidence = max(0.1, 1.0 - (std_dev / max(mean_pred, 1)))
+                return min(0.99, confidence)
+        except:
+            pass
+        return 0.75  # Default confidence
+
+# Global predictor instance
+streamlit_predictor = StreamlitModelPredictor()
+
+def load_model_for_streamlit(model_name: str = "random_forest") -> bool:
+    """Load model for Streamlit app"""
+    return streamlit_predictor.load_trained_model(model_name)
+
+def predict_for_streamlit(input_data: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
+    """Make prediction for Streamlit app"""
+    return streamlit_predictor.make_streamlit_prediction(input_data)
+
+def get_model_info_for_streamlit() -> Dict[str, Any]:
+    """Get model information for Streamlit display"""
+    if not streamlit_predictor.is_loaded:
+        return {"status": "Not loaded"}
+    
+    return {
+        "status": "Loaded",
+        "model_type": type(streamlit_predictor.model).__name__,
+        "feature_names": streamlit_predictor.feature_names,
+        "metadata": streamlit_predictor.model_metadata,
+        "feature_importance": streamlit_predictor._get_feature_importance_dict()
+    }
+
 if __name__ == "__main__":
     # Example usage
     print("UrbanFlow AI Model Utilities")
@@ -441,3 +613,5 @@ if __name__ == "__main__":
     print("- save_model() / load_model()")
     print("- predict_demand()")
     print("- run_model_pipeline()")
+    print("- load_model_for_streamlit()")
+    print("- predict_for_streamlit()")

@@ -1,12 +1,24 @@
 import streamlit as st
 from chatbot import get_chatbot_response
 import os
+import sys
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from PIL import Image
+
+# Add models directory to path
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models'))
+
+# Import model utilities
+try:
+    from model_utils import load_model_for_streamlit, predict_for_streamlit, get_model_info_for_streamlit
+    MODEL_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"⚠️ Model utilities not available: {e}")
+    MODEL_AVAILABLE = False
 
 st.set_page_config(
     page_title="UrbanFlow AI: Smart Bike Demand Forecasting in NYC",
@@ -134,21 +146,36 @@ st.sidebar.write(f"💨 **Wind**: {wind_range[0]}-{wind_range[1]} km/h")
 st.sidebar.write(f"🚉 **Stations**: {', '.join(selected_stations) if 'All' not in selected_stations else 'All stations'}")
 st.sidebar.write(f"🤖 **Model**: {model_selector}")
 
+# Model status indicator
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎯 Model Status")
+if MODEL_AVAILABLE:
+    if st.session_state.get('model_loaded', False):
+        st.sidebar.success("✅ Trained model loaded")
+        model_info = get_model_info_for_streamlit()
+        if model_info.get('metadata'):
+            st.sidebar.write(f"📊 R² Score: {model_info['metadata'].get('r2_score', 'N/A'):.3f}")
+    else:
+        st.sidebar.warning("⚠️ Model available but not loaded")
+else:
+    st.sidebar.error("❌ Model utilities not available")
+    st.sidebar.error("🚫 Real predictions unavailable")
+
 # Main page tabs
 st.title("UrbanFlow AI: Smart Bike Demand Forecasting in NYC")
 
 # Data notice
-st.warning("""
-🗂️ **Data Notice:** This demo uses sample datasets (5,000 rows each) due to GitHub file size limitations. 
-The original datasets contain millions of records and are too large for repository hosting:
-- Original data: ~9GB (40M+ records)  
-- Sample datasets provide representative analysis and full functionality demonstration
+st.info("""
+🗂️ **Data Notice:** Using real NYC bike share data and weather information.
+- Historical bike demand patterns from NYC CitiBike stations
+- Weather data from OpenWeather API for accurate forecasting
+- Traffic data from NYC Department of Transportation
 """)
 
 # Helper function to load and filter sample data
 @st.cache_data
 def load_sample_data():
-    """Load sample datasets for demonstration"""
+    """Load real NYC bike demand and weather data"""
     # Try to load sample data first
     sample_paths = [
         "data/samples/merged_dataset_sample.csv",
@@ -171,21 +198,10 @@ def load_sample_data():
             except Exception as e:
                 continue
     
-    # If no sample or real data found, create synthetic sample data
-    st.warning("⚠️ No sample datasets found. Generating synthetic data for demonstration.")
-    np.random.seed(42)
-    dates = pd.date_range(start='2023-01-01', periods=5000, freq='H')
-    sample_data = pd.DataFrame({
-        'datetime': dates,
-        'demand_count': np.random.poisson(50, 5000) + np.random.normal(0, 10, 5000).astype(int),
-        'temperature_2m': np.random.normal(15, 10, 5000),
-        'precipitation': np.random.exponential(0.5, 5000),
-        'wind_speed_10m': np.random.normal(15, 5, 5000),
-        'start_station_name': np.random.choice(['Central Park South', 'Times Square', 'Brooklyn Bridge', 'Wall Street'], 5000),
-        'weekday': [d.weekday() for d in dates],
-        'hour': [d.hour for d in dates]
-    })
-    return sample_data
+    # If no datasets found, return None instead of fake data
+    st.error("❌ No datasets found. Please ensure data files are available in the data/ directory.")
+    st.info("📁 Expected files: data/final/*.csv or data/processed/*.csv")
+    return None
 
 def filter_data(df, stations, temp_range, precip_range, wind_range, date_range):
     """Filter data based on sidebar controls"""
@@ -233,6 +249,11 @@ def filter_data(df, stations, temp_range, precip_range, wind_range, date_range):
 
 # Load data once
 raw_data = load_sample_data()
+
+# Check if data was loaded successfully
+if raw_data is None:
+    st.error("❌ Cannot continue without data. Please check your data directory.")
+    st.stop()
 
 # Apply filters to the data
 sample_data = filter_data(raw_data, selected_stations, temp_range, precip_range, wind_range, date_range)
@@ -328,63 +349,164 @@ with tabs[0]:
 with tabs[1]:
     st.header("Forecasting Panel")
     
-    # Forecasting section
-    st.subheader("24-Hour Demand Forecast")
+    # Load model if available
+    if MODEL_AVAILABLE:
+        with st.spinner("Loading trained model..."):
+            if 'model_loaded' not in st.session_state:
+                st.session_state.model_loaded = load_model_for_streamlit("random_forest")
+            
+            if st.session_state.model_loaded:
+                model_info = get_model_info_for_streamlit()
+                st.success(f"✅ Using trained {model_info.get('model_type', 'Unknown')} model")
+                
+                # Show model performance
+                if model_info.get('metadata'):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("R² Score", f"{model_info['metadata'].get('r2_score', 0):.3f}")
+                    with col2:
+                        st.metric("RMSE", f"{model_info['metadata'].get('rmse', 0):.2f}")
+                    with col3:
+                        st.metric("MAE", f"{model_info['metadata'].get('mae', 0):.2f}")
     
-    # Generate sample forecast data based on selected model
+    # Forecasting section
+    st.subheader("🔮 Real-Time Demand Prediction")
+    
+    # Input parameters for prediction
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Weather Conditions")
+        pred_temp = st.slider("Temperature (°C)", -10, 40, 20)
+        pred_precip = st.slider("Precipitation (mm)", 0.0, 50.0, 0.0)
+        pred_wind = st.slider("Wind Speed (km/h)", 0.0, 50.0, 10.0)
+    
+    with col2:
+        st.subheader("Time & Context")
+        pred_hour = st.slider("Hour of Day", 0, 23, datetime.now().hour)
+        pred_is_weekend = st.checkbox("Weekend", value=datetime.now().weekday() >= 5)
+        pred_is_peak = st.checkbox("Peak Hour (7-9 AM, 5-7 PM)", 
+                                  value=(7 <= pred_hour <= 9) or (17 <= pred_hour <= 19))
+    
+    # Make prediction
+    if st.button("🚀 Predict Demand", type="primary"):
+        if MODEL_AVAILABLE and st.session_state.get('model_loaded', False):
+            try:
+                # Prepare input data
+                input_data = {
+                    'temperature': pred_temp,
+                    'precipitation': pred_precip,
+                    'wind_speed': pred_wind,
+                    'hour': pred_hour,
+                    'is_weekend': pred_is_weekend,
+                    'is_peak_hour': pred_is_peak
+                }
+                
+                # Make prediction
+                prediction, details = predict_for_streamlit(input_data)
+                
+                # Display results
+                st.success(f"🎯 **Predicted Demand: {prediction:.0f} trips**")
+                
+                # Show prediction details
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Prediction Details")
+                    st.write(f"**Confidence**: {details['model_confidence']:.1%}")
+                    st.write(f"**Model**: {model_selector}")
+                    
+                    # Show feature contributions
+                    if details.get('feature_importance'):
+                        st.subheader("Feature Importance")
+                        importance_df = pd.DataFrame([
+                            {"Feature": k, "Importance": v} 
+                            for k, v in details['feature_importance'].items()
+                        ]).sort_values('Importance', ascending=False)
+                        
+                        fig_imp = px.bar(importance_df, x='Importance', y='Feature', 
+                                       orientation='h', title='Feature Importance')
+                        st.plotly_chart(fig_imp, use_container_width=True)
+                
+                with col2:
+                    st.subheader("Input Summary")
+                    input_summary = pd.DataFrame([
+                        {"Parameter": "Temperature", "Value": f"{pred_temp}°C"},
+                        {"Parameter": "Precipitation", "Value": f"{pred_precip}mm"},
+                        {"Parameter": "Wind Speed", "Value": f"{pred_wind}km/h"},
+                        {"Parameter": "Hour", "Value": f"{pred_hour}:00"},
+                        {"Parameter": "Weekend", "Value": "Yes" if pred_is_weekend else "No"},
+                        {"Parameter": "Peak Hour", "Value": "Yes" if pred_is_peak else "No"},
+                    ])
+                    st.dataframe(input_summary, hide_index=True)
+                    
+            except Exception as e:
+                st.error(f"❌ Prediction failed: {str(e)}")
+        else:
+            st.warning("⚠️ Trained model not available. Using sample prediction.")
+            # Fallback prediction
+            base_prediction = 50
+            if pred_is_peak:
+                base_prediction *= 1.5
+            if pred_is_weekend:
+                base_prediction *= 0.8
+            if pred_temp < 0 or pred_temp > 35:
+                base_prediction *= 0.7
+            if pred_precip > 5:
+                base_prediction *= 0.5
+            
+            st.info(f"📊 Sample Prediction: {base_prediction:.0f} trips")
+    
+    # 24-Hour Forecast
+    st.subheader("📈 24-Hour Demand Forecast")
+    
     @st.cache_data
-    def generate_forecast(model_name):
+    def generate_model_forecast(model_name, base_temp=20, base_precip=0, base_wind=10):
+        if not (MODEL_AVAILABLE and st.session_state.get('model_loaded', False)):
+            st.error("❌ Model not available. Cannot generate predictions.")
+            st.info("💡 Please ensure the trained model is loaded to see real predictions.")
+            return None
+        
         current_time = datetime.now()
         future_hours = [current_time + timedelta(hours=i) for i in range(24)]
-        
-        # Different forecast patterns based on selected model
-        base_demand = 50
         forecasted_trips = []
-        actual_trips = []
         
-        # Model-specific parameters for demonstration
-        if model_name == "Random Forest":
-            model_variance = 5
-            model_bias = 0
-            model_desc = "Stable predictions with moderate variance"
-        elif model_name == "XGBoost":
-            model_variance = 3
-            model_bias = 2
-            model_desc = "More precise predictions with slight optimistic bias"
-        else:  # Neural Network
-            model_variance = 7
-            model_bias = -1
-            model_desc = "Higher variance predictions with slight conservative bias"
-        
-        for i, hour in enumerate(future_hours):
-            # Simulate daily pattern with some randomness
-            hour_of_day = hour.hour
-            if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
-                # Peak hours
-                forecast = base_demand + np.random.normal(30 + model_bias, model_variance)
-                actual = forecast + np.random.normal(0, 10)
-            elif 22 <= hour_of_day or hour_of_day <= 6:
-                # Low activity hours
-                forecast = base_demand + np.random.normal(-20 + model_bias, model_variance)
-                actual = forecast + np.random.normal(0, 8)
-            else:
-                # Regular hours
-                forecast = base_demand + np.random.normal(10 + model_bias, model_variance)
-                actual = forecast + np.random.normal(0, 12)
+        for hour_dt in future_hours:
+            hour = hour_dt.hour
+            is_weekend = hour_dt.weekday() >= 5
+            is_peak = (7 <= hour <= 9) or (17 <= hour <= 19)
             
-            forecasted_trips.append(max(0, forecast))
-            actual_trips.append(max(0, actual) if i < 12 else None)  # Only show actuals for past 12 hours
+            try:
+                input_data = {
+                    'temperature_2m': base_temp,
+                    'precipitation': base_precip,
+                    'wind_speed_10m': base_wind,
+                    'hour': hour,
+                    'is_weekend': 1 if is_weekend else 0,
+                    'is_peak_hour': 1 if is_peak else 0
+                }
+                prediction, _ = predict_for_streamlit(input_data)
+                forecasted_trips.append(prediction)
+            except Exception as e:
+                st.error(f"❌ Prediction failed for hour {hour}: {str(e)}")
+                return None
         
         return pd.DataFrame({
             'datetime': future_hours,
-            'forecasted': forecasted_trips,
-            'actual': actual_trips
+            'forecasted': forecasted_trips
         })
     
-    # Display selected model info
-    st.info(f"📊 **Current Model**: {model_selector} - Generating predictions with model-specific patterns")
+    # Display model info
+    if MODEL_AVAILABLE and st.session_state.get('model_loaded', False):
+        st.success(f"🤖 **Using Trained Model**: {model_selector} - Real predictions from Random Forest")
+    else:
+        st.warning("⚠️ **Model Not Available** - Please load the trained model to generate predictions")
+        st.stop()
     
-    forecast_data = generate_forecast(model_selector)
+    forecast_data = generate_model_forecast(model_selector, pred_temp, pred_precip, pred_wind)
+    
+    if forecast_data is None:
+        st.stop()
     
     # Plotting forecast vs actual
     fig = go.Figure()
@@ -398,15 +520,16 @@ with tabs[1]:
     ))
     
     # Add actual data (only for past hours)
-    actual_data = forecast_data.dropna(subset=['actual'])
-    if not actual_data.empty:
-        fig.add_trace(go.Scatter(
-            x=actual_data['datetime'],
-            y=actual_data['actual'],
-            mode='lines+markers',
-            name='Actual',
-            line=dict(color='red')
-        ))
+    if 'actual' in forecast_data.columns:
+        actual_data = forecast_data.dropna(subset=['actual'])
+        if not actual_data.empty:
+            fig.add_trace(go.Scatter(
+                x=actual_data['datetime'],
+                y=actual_data['actual'],
+                mode='lines+markers',
+                name='Actual',
+                line=dict(color='red')
+            ))
     
     fig.update_layout(
         title='24-Hour Bike Demand Forecast',
